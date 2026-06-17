@@ -1,0 +1,14 @@
+# No meter en la imagen los datos de ejemplo ni temporales
+*.pdf
+*.PDF
+*.SQL
+*.DAT
+*.fdx
+*.idx
+*.xlsx
+*.txt
+!requirements.txt
+__pycache__/
+*.pyc
+.DS_Store
+convenio y actualizaciones/

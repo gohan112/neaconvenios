@@ -1,0 +1,29 @@
+# Datos de convenios (NO publicar)
+*.pdf
+*.PDF
+*.SQL
+*.DAT
+*.fdx
+*.idx
+33029708.txt
+*_tablas.pdf
+
+# Secretos
+clave_claude.txt
+clave_github.txt
+.streamlit/secrets.toml
+
+# Salidas generadas de prueba
+convenio_*_obras.xlsx
+convenio_*.sql
+metal_obras.xlsx
+
+# Temporales
+__pycache__/
+*.pyc
+.DS_Store
+convenio y actualizaciones/
+
+# Config local de Claude Code y salidas Excel
+.claude/
+*.xlsx
