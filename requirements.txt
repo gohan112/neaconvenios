@@ -3,3 +3,4 @@ pdfplumber>=0.11
 openpyxl>=3.1
 pandas>=2.0
 anthropic>=0.40   # extracción con Claude Opus 4.8 (requiere ANTHROPIC_API_KEY)
+pypdf>=4.0        # recorta el PDF a las páginas con tablas antes de enviarlo a Claude
