@@ -25,7 +25,7 @@ python3 -m venv venv
 
 echo ">> 3/4 Variable de la API key (vacía de momento; se puede añadir luego)…"
 if [ ! -f /etc/neaconvenios.env ]; then
-  echo 'ANTHROPIC_API_KEY=' | sudo tee /etc/neaconvenios.env >/dev/null
+  printf 'ANTHROPIC_API_KEY=\nNEACONV_PASSWORD=\n' | sudo tee /etc/neaconvenios.env >/dev/null
 fi
 
 echo ">> 4/4 Servicio del sistema (arranque automático)…"

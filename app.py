@@ -80,6 +80,32 @@ def _leer_sql(archivo) -> str:
     return texto.replace("\r\n", "\n")
 
 
+def _password_ok() -> bool:
+    """
+    Protección por contraseña, OPCIONAL: solo se exige si existe la variable de
+    entorno NEACONV_PASSWORD (la ponemos en el servidor). En local, sin esa
+    variable, no pide nada. Evita que un tercero con la URL gaste la API de Claude.
+    """
+    requerida = os.environ.get("NEACONV_PASSWORD")
+    if not requerida or st.session_state.get("_auth_ok"):
+        return True
+    with st.form("login"):
+        st.caption("Acceso restringido — introduce la contraseña.")
+        pw = st.text_input("Contraseña", type="password")
+        entrar = st.form_submit_button("Entrar")
+    if entrar:
+        if pw == requerida:
+            st.session_state["_auth_ok"] = True
+            st.rerun()
+        else:
+            st.error("Contraseña incorrecta.")
+    return False
+
+
+if not _password_ok():
+    st.stop()
+
+
 # ============================================================ 1. Elegir destino
 modo = st.segmented_control(
     "¿Qué quieres generar?",
