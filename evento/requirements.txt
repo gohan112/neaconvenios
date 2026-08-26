@@ -1,0 +1,4 @@
+flask>=3.0      # servidor web y rutas
+waitress>=3.0   # servidor de producción (sencillo y multiplataforma)
+openpyxl>=3.1   # importar participantes desde Excel (.xlsx)
+tzdata>=2024.1  # zona horaria Europe/Madrid en Windows/contenedores

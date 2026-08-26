@@ -1,0 +1,7 @@
+# No meter en la imagen la base de datos local ni temporales
+*.db
+*.db-*
+clave_admin.txt
+__pycache__/
+*.pyc
+.DS_Store

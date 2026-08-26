@@ -27,3 +27,8 @@ convenio y actualizaciones/
 # Config local de Claude Code y salidas Excel
 .claude/
 *.xlsx
+
+# App del evento (evento/): base de datos local y contraseña del panel
+evento/*.db
+evento/*.db-*
+clave_admin.txt

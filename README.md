@@ -1,5 +1,9 @@
 # Convenios BOPA → a3nom
 
+> ℹ️ Este repositorio también contiene **[`evento/` — NeaEvento](evento/README.md)**,
+> una app independiente para el evento de empresa (día 12): enlace personal por
+> participante, equipos con sorteo, programa del día y lugares.
+
 Herramienta para importar convenios colectivos publicados en el BOPA al programa
 de nóminas **a3nom** (Wolters Kluwer), generando el `.SQL` de importación y un
 `.xlsx` para el módulo de obras.
