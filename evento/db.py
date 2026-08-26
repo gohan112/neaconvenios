@@ -65,6 +65,7 @@ CREATE TABLE IF NOT EXISTS participantes (
   equipo_id     INTEGER REFERENCES equipos(id) ON DELETE SET NULL,
   token         TEXT NOT NULL UNIQUE,
   visto_en      TEXT,                          -- primera vez que abrió su enlace
+  revelado_en   TEXT,                          -- cuándo vio la animación del sorteo
   confirmado    INTEGER NOT NULL DEFAULT 0,    -- 0 pendiente · 1 viene · -1 no viene
   confirmado_en TEXT,
   notas         TEXT NOT NULL DEFAULT ''
@@ -116,6 +117,10 @@ def conexion() -> sqlite3.Connection:
 def iniciar() -> None:
     con = conexion()
     con.executescript(ESQUEMA)
+    # Migración para bases de datos creadas antes de existir la columna
+    columnas = {r["name"] for r in con.execute("PRAGMA table_info(participantes)")}
+    if "revelado_en" not in columnas:
+        con.execute("ALTER TABLE participantes ADD COLUMN revelado_en TEXT")
     # Semillas de configuración (solo las claves que falten)
     existentes = {r["clave"] for r in con.execute("SELECT clave FROM config")}
     for clave, valor in CONFIG_DEFECTO.items():
@@ -263,7 +268,7 @@ def sortear(todos: bool = False) -> int:
         con.close()
         raise ValueError("No hay equipos: crea los equipos antes de sortear.")
     if todos:
-        con.execute("UPDATE participantes SET equipo_id = NULL")
+        con.execute("UPDATE participantes SET equipo_id = NULL, revelado_en = NULL")
     pendientes = [r["id"] for r in con.execute(
         "SELECT id FROM participantes WHERE equipo_id IS NULL"
     )]
@@ -277,7 +282,9 @@ def sortear(todos: bool = False) -> int:
     for pid in pendientes:
         minimo = min(tam.values())
         eid = random.choice([i for i in ids_equipos if tam[i] == minimo])
-        con.execute("UPDATE participantes SET equipo_id = ? WHERE id = ?", (eid, pid))
+        # revelado_en a NULL: al cambiar de equipo vuelve a ver la animación del sorteo
+        con.execute("UPDATE participantes SET equipo_id = ?, revelado_en = NULL "
+                    "WHERE id = ?", (eid, pid))
         tam[eid] += 1
     con.commit()
     con.close()
@@ -385,12 +392,19 @@ def participante_por_token(token: str) -> dict | None:
 def editar_participante(participante_id: int, nombre: str, telefono: str, email: str,
                         equipo_id: int | None, notas: str) -> None:
     con = conexion()
+    actual = con.execute(
+        "SELECT equipo_id FROM participantes WHERE id = ?", (participante_id,)
+    ).fetchone()
     con.execute(
         "UPDATE participantes SET nombre = ?, telefono = ?, email = ?, equipo_id = ?, "
         "notas = ? WHERE id = ?",
         (nombre.strip(), telefono.strip(), email.strip(), equipo_id, notas.strip(),
          participante_id),
     )
+    if actual and actual["equipo_id"] != equipo_id:
+        # Cambia de equipo → volverá a ver la animación del sorteo con el nuevo
+        con.execute("UPDATE participantes SET revelado_en = NULL WHERE id = ?",
+                    (participante_id,))
     con.commit()
     con.close()
 
@@ -407,7 +421,8 @@ def regenerar_token(participante_id: int) -> str:
     con = conexion()
     token = _token_nuevo(con)
     con.execute(
-        "UPDATE participantes SET token = ?, visto_en = NULL WHERE id = ?",
+        "UPDATE participantes SET token = ?, visto_en = NULL, revelado_en = NULL "
+        "WHERE id = ?",
         (token, participante_id),
     )
     con.commit()
@@ -419,6 +434,17 @@ def marcar_visto(participante_id: int) -> None:
     con = conexion()
     con.execute(
         "UPDATE participantes SET visto_en = ? WHERE id = ? AND visto_en IS NULL",
+        (ahora(), participante_id),
+    )
+    con.commit()
+    con.close()
+
+
+def marcar_revelado(participante_id: int) -> None:
+    """El participante ya ha visto la animación del sorteo de su equipo."""
+    con = conexion()
+    con.execute(
+        "UPDATE participantes SET revelado_en = ? WHERE id = ? AND revelado_en IS NULL",
         (ahora(), participante_id),
     )
     con.commit()

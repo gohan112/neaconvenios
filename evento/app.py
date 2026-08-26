@@ -116,6 +116,16 @@ def ver_participante(token: str):
     if not p:
         return paginas.render_no_encontrado(db.leer_config()), 404
     db.marcar_visto(p["id"])
+
+    # Con equipo asignado y sorteo aún no visto → animación del sorteo (una vez)
+    if p["equipo_id"] and not p.get("revelado_en"):
+        equipos = db.listar_equipos()
+        indice = next((i for i, eq in enumerate(equipos)
+                       if eq["id"] == p["equipo_id"]), None)
+        if indice is not None:
+            return paginas.render_sorteo(cfg=db.leer_config(), p=p,
+                                         equipos=equipos, indice_final=indice)
+
     equipo = db.equipo(p["equipo_id"]) if p["equipo_id"] else None
     companeros = db.miembros(p["equipo_id"]) if p["equipo_id"] else []
     return paginas.render_participante(
@@ -123,6 +133,16 @@ def ver_participante(token: str):
         agenda=db.agenda_para(p["equipo_id"]), lugares=db.listar_lugares(),
         referencia=db.hoy(), avisos=_avisos(),
     )
+
+
+@app.post("/p/<token>/revelado")
+def marcar_revelado(token: str):
+    """La animación del sorteo ha terminado (o se saltó sin JavaScript)."""
+    p = db.participante_por_token(token)
+    if not p:
+        abort(404)
+    db.marcar_revelado(p["id"])
+    return redirect(f"/p/{token}")
 
 
 @app.post("/p/<token>/asistencia")

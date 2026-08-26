@@ -11,6 +11,7 @@ por `e()` antes de incrustarse en el HTML.
 
 from __future__ import annotations
 
+import json
 import os
 from datetime import date
 from urllib.parse import quote
@@ -148,7 +149,88 @@ details summary{cursor:pointer;color:var(--gris);font-size:14px;margin-top:8px}
 .silencio{color:var(--gris);font-size:14px}
 .punto-color{display:inline-block;width:14px;height:14px;border-radius:50%;
              vertical-align:-2px;margin-right:6px}
+.sorteo-escena{text-align:center;padding:8px 0 4px}
+.caja-sorteo{width:200px;height:200px;margin:22px auto 10px;border-radius:28px;
+             background:linear-gradient(150deg,#FFD766,#E8A013);padding:12px;
+             box-shadow:0 8px 24px rgba(0,0,0,.20);transition:transform .35s}
+.caja-sorteo .baldosa{width:100%;height:100%;border-radius:18px;background:#fff;
+                      display:flex;align-items:center;justify-content:center;
+                      font-size:88px;font-weight:800;color:#E8A013;
+                      transition:background .06s;user-select:none;line-height:1}
+.caja-sorteo.girando{animation:tiembla .22s infinite}
+@keyframes tiembla{0%{transform:rotate(-1.5deg) scale(1.02)}
+                   50%{transform:rotate(1.5deg) scale(1.02)}
+                   100%{transform:rotate(-1.5deg) scale(1.02)}}
+.caja-sorteo.ganador{transform:scale(1.12)}
+.sorteo-equipo{font-size:28px;font-weight:800;min-height:40px;margin:6px 0}
+.sorteo-resultado{display:none}
+.boton.gordo{font-size:18px;padding:14px 26px;border-radius:14px;
+             animation:late 1.6s ease-out infinite}
+@keyframes late{0%{box-shadow:0 0 0 0 rgba(204,12,24,.45)}
+                70%{box-shadow:0 0 0 16px rgba(204,12,24,0)}
+                100%{box-shadow:0 0 0 0 rgba(204,12,24,0)}}
+.confeti{position:fixed;top:42%;left:50%;width:12px;height:12px;border-radius:3px;
+         pointer-events:none;z-index:50;animation:vuela 1.2s ease-out forwards}
+@keyframes vuela{to{transform:translate(var(--dx),var(--dy)) rotate(720deg);opacity:0}}
 @media (max-width:520px){h1{font-size:21px}.agenda-hora{min-width:52px}}
+"""
+
+# Animación del sorteo: la caja va pasando por los equipos cada vez más despacio
+# y cae SIEMPRE en el equipo real del participante (índice FINAL, ya asignado).
+# Espera las constantes EQUIPOS (lista), FINAL (índice) y RUTA_REVELADO (POST).
+GUION_SORTEO = """
+(function(){
+  var boton = document.getElementById('boton-sorteo');
+  if (!boton) return;
+  var caja = document.getElementById('caja-sorteo');
+  var baldosa = document.getElementById('baldosa');
+  var nombreEq = document.getElementById('sorteo-equipo');
+  var resultado = document.getElementById('sorteo-resultado');
+  var intro = document.getElementById('sorteo-intro');
+
+  function pinta(i){
+    var eq = EQUIPOS[i];
+    baldosa.style.background = eq.color;
+    baldosa.style.color = '#fff';
+    baldosa.textContent = eq.emoji || (eq.nombre || '?').charAt(0).toUpperCase();
+    nombreEq.textContent = eq.nombre;
+    nombreEq.style.color = eq.color;
+  }
+  function confeti(color){
+    for (var i = 0; i < 30; i++){
+      var s = document.createElement('span');
+      s.className = 'confeti';
+      s.style.background = (i % 3 === 0) ? '#E8A013' : color;
+      s.style.setProperty('--dx', (Math.random() * 340 - 170) + 'px');
+      s.style.setProperty('--dy', (Math.random() * -320 - 60) + 'px');
+      document.body.appendChild(s);
+      (function(el){ setTimeout(function(){ el.remove(); }, 1300); })(s);
+    }
+  }
+  function acaba(){
+    caja.classList.remove('girando');
+    caja.classList.add('ganador');
+    try { if (navigator.vibrate) navigator.vibrate([90, 40, 140]); } catch (e) {}
+    confeti(EQUIPOS[FINAL].color);
+    resultado.style.display = 'block';
+    try { fetch(RUTA_REVELADO, {method: 'POST', keepalive: true}); } catch (e) {}
+  }
+  boton.addEventListener('click', function(){
+    boton.style.display = 'none';
+    if (intro) intro.style.display = 'none';
+    caja.classList.add('girando');
+    var n = EQUIPOS.length;
+    var total = 4 * n + FINAL + 1;   // acaba exactamente en FINAL
+    var i = -1, paso = 0, retardo = 70;
+    function tic(){
+      paso++; i = (i + 1) % n; pinta(i);
+      if (paso >= total){ acaba(); return; }
+      retardo *= (paso > total - n) ? 1.35 : 1.05;  // última vuelta, frenazo
+      setTimeout(tic, retardo);
+    }
+    tic();
+  });
+})();
 """
 
 GUION = """
@@ -240,6 +322,59 @@ def render_no_encontrado(cfg: dict) -> str:
 </div>
 """
     return base("Enlace no válido", cuerpo)
+
+
+def render_sorteo(cfg: dict, p: dict, equipos: list[dict], indice_final: int) -> str:
+    """
+    Pantalla del sorteo simulado (estilo caja de ítems de Mario): los colores de
+    los equipos van pasando por la caja cada vez más despacio y cae en el equipo
+    REAL del participante, que ya está asignado. Se enseña una sola vez.
+    """
+    datos_equipos = [
+        {"nombre": eq["nombre"], "color": eq.get("color") or "#CC0C18",
+         "emoji": eq.get("emoji") or ""}
+        for eq in equipos
+    ]
+    # json.dumps con ensure_ascii y sin '</' peligrosos para incrustar en <script>
+    json_equipos = json.dumps(datos_equipos, ensure_ascii=True).replace("</", "<\\/")
+    equipo_final = equipos[indice_final]
+    nombre_pila = (p["nombre"].split() or [""])[0]
+    ruta_revelado = f"/p/{p['token']}/revelado"
+    cuerpo = f"""
+<div class="sorteo-escena">
+  <h1>¡Hola, {e(nombre_pila)}! 👋</h1>
+  <div class="silencio"><strong>{e(cfg.get('nombre'))}</strong> ·
+  📅 {e(fecha_bonita(cfg.get('fecha', '')))}</div>
+  <p id="sorteo-intro">Los nombres de todos los participantes han entrado en el
+  sorteo de equipos…<br>¿Preparado/a para descubrir el tuyo?</p>
+
+  <div class="caja-sorteo" id="caja-sorteo"><div class="baldosa" id="baldosa">?</div></div>
+  <div class="sorteo-equipo" id="sorteo-equipo"></div>
+
+  <button class="boton gordo" id="boton-sorteo" type="button">🎲 ¡Dale al sorteo!</button>
+
+  <div class="sorteo-resultado" id="sorteo-resultado">
+    <h2 style="font-size:22px">¡Estás en el equipo
+    {e(equipo_final.get('emoji'))} {e(equipo_final['nombre'])}!</h2>
+    <a class="boton" href="/p/{e(p['token'])}">Ver mis compañeros y el programa →</a>
+  </div>
+
+  <noscript>
+    <div class="aviso">Tu navegador no puede reproducir la animación del sorteo.</div>
+    <form method="post" action="{e(ruta_revelado)}">
+      <button class="boton" type="submit">Ver mi equipo</button>
+    </form>
+  </noscript>
+</div>
+<div class="pie">Nea Master · NeaEvento</div>
+<script>
+var EQUIPOS = {json_equipos};
+var FINAL = {int(indice_final)};
+var RUTA_REVELADO = {json.dumps(ruta_revelado)};
+{GUION_SORTEO}
+</script>
+"""
+    return base(cfg.get("nombre", "Evento"), cuerpo)
 
 
 def _bloque_asistencia(p: dict, cfg: dict) -> str:

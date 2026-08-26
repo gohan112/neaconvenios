@@ -1,11 +1,15 @@
 # NeaEvento — app del evento (día 12)
 
 App web para organizar el evento de empresa. Cada participante recibe un
-**enlace personal**; al abrirlo queda «activado» y ve **su equipo y sus
-compañeros, el programa del día (calendario) y los lugares** con botón de
-«cómo llegar», y puede **confirmar su asistencia**. La organización lo gestiona
-todo desde un panel: participantes, equipos con **sorteo automático
-equilibrado**, agenda, lugares y reparto de enlaces (copiar, WhatsApp o CSV).
+**enlace personal**; al abrirlo queda «activado», su nombre ya aparece escrito
+y, la primera vez, ve la **animación del sorteo** (una caja estilo «ítem de
+Mario» por la que van pasando los colores de los equipos cada vez más despacio
+hasta caer en el suyo — el equipo real ya asignado por la organización: el
+sorteo es solo el espectáculo). Después ve **su equipo y sus compañeros, el
+programa del día (calendario) y los lugares** con botón de «cómo llegar», y
+puede **confirmar su asistencia**. La organización lo gestiona todo desde un
+panel: participantes, equipos con **sorteo automático equilibrado**, agenda,
+lugares y reparto de enlaces (copiar, WhatsApp o CSV).
 
 Es una app independiente de NeaConvenios: Python + Flask + SQLite, sin más.
 Todos los datos viven en **un solo fichero** (`evento.db`): la copia de
@@ -22,7 +26,10 @@ seguridad es copiar ese fichero.
 3. **🎽 Equipos** — escribe los nombres separados por comas (los colores se
    asignan solos) y pulsa **Sorteo**: reparte de forma aleatoria y equilibrada.
    Las asignaciones a mano se respetan si repartes «solo a los que no tienen
-   equipo».
+   equipo». También puedes importar el reparto ya decidido (columna `equipo`
+   del Excel/CSV). La primera vez que cada participante abra su enlace después
+   de tener equipo verá la animación del sorteo cayendo en su equipo real; si
+   luego cambias a alguien de equipo, volverá a ver la animación con el nuevo.
 4. **🗓️ Agenda** y **📍 Lugares** — el programa del día, cada actividad con su
    hora, lugar y, si hace falta, solo para un equipo (rotaciones). Los lugares
    con dirección generan solos el botón «Cómo llegar» (o pega el enlace exacto
