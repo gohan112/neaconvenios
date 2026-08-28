@@ -8,12 +8,14 @@ Olimpiada Nea Master, N equipos se juegan la victoria… el sorteo es aleatorio�
 sorteo**: una caja estilo «ítem de Mario» por la que van pasando los colores de
 los equipos cada vez más despacio hasta caer en el suyo — el equipo real ya
 asignado por la organización: el sorteo es el espectáculo. Después su página
-tiene tres pestañas: **🎽 Mi equipo** (los compañeros van apareciendo EN
-DIRECTO según pasan por el sorteo; los que faltan son incógnitas «?»), **🗓️
-Programa** y **📍 Lugares** con botón de «cómo llegar»; y puede **confirmar su
-asistencia**. La organización lo gestiona todo desde un panel: participantes,
-equipos con **sorteo automático equilibrado** y reglas de «van juntos», agenda,
-lugares y reparto de enlaces (copiar, WhatsApp o CSV).
+—**teñida con el color de su equipo**— tiene cuatro secciones: **🎽 Equipo**
+(los compañeros van apareciendo EN DIRECTO según pasan por el sorteo; los que
+faltan son incógnitas «?»), **🗓️ Programa** (con su sala y su tanda, y el día
+del evento marca la actividad **en curso** y la **siguiente**), **🏆 Puntos**
+(clasificación en directo) y **📍 Lugares** con botón de «cómo llegar»; y puede
+**confirmar su asistencia**. La organización lo gestiona todo desde un panel:
+participantes, equipos con **sorteo automático equilibrado** y reglas de «van
+juntos», agenda, lugares, puntos y reparto de enlaces (copiar, WhatsApp o CSV).
 
 Es una app independiente de NeaConvenios: Python + Flask + SQLite, sin más.
 Todos los datos viven en **un solo fichero** (`evento.db`): la copia de
@@ -63,6 +65,10 @@ seguridad es copiar ese fichero.
    uno a uno, o descargando el **CSV** para Excel/correo. En **📊 Resumen** ves
    quién abrió su enlace y quién confirmó.
 
+En **📊 Resumen** hay una lista de **Preparativos** que dice, con ✓ y ⬜, qué
+está listo y qué falta (equipos, capitanes, salas, tandas, URL, contraseña,
+enlaces abiertos), con enlace directo a lo que queda pendiente.
+
 El participante no necesita contraseña ni instalar nada: solo abrir su enlace
 en el móvil.
 
@@ -71,6 +77,7 @@ en el móvil.
 ```bash
 pip install -r requirements.txt
 python app.py            # → http://localhost:8502  (panel en /admin)
+python pruebas.py        # comprueba que todo sigue funcionando
 ```
 
 En Windows/Mac también valen los dobles clics: `Instalar.bat` / `Instalar
@@ -126,7 +133,33 @@ Después, en el panel **⚙️ Evento**, pon la **URL pública** (p. ej.
 | Archivo | Función |
 |---|---|
 | `app.py` | Rutas web (participante + panel de organización) y arranque |
-| `db.py` | Datos en SQLite: config, equipos, participantes, agenda, lugares, sorteo |
+| `db.py` | Datos en SQLite: config, equipos, participantes, agenda, lugares, sorteos y puntos |
 | `paginas.py` | Todo el HTML/CSS (página del participante y panel) |
+| `pruebas.py` | Pruebas automáticas: `python pruebas.py` |
+| `deploy/lightsail.sh` | Instalación en Lightsail pegando un solo comando |
 | `deploy/setup.sh` | Instalación como servicio en un servidor Ubuntu |
 | `Dockerfile` | Imagen Docker (datos persistentes en el volumen `/data`) |
+
+## Notas de diseño
+
+Por si hay que tocar el aspecto más adelante, el criterio que sigue la app:
+
+- **Móvil primero.** Todo está pensado para un móvil en la mano el día del
+  evento: botones y pestañas de 44px o más, textos de 16px en los campos (así
+  el iPhone no hace zoom al escribir) y nada que se salga de pantalla ni a
+  320px de ancho.
+- **Un solo sistema.** En `paginas.py`, el bloque `ESTILO` empieza con los
+  *tokens* (colores, espaciado `--e1…--e6`, radios y sombras). Cambia el token
+  y cambia toda la app; evita estilos sueltos.
+- **El color manda.** La página de cada participante se tiñe con el color de
+  su equipo (variable `--acento`); el texto encima lo elige `color_texto()`
+  según el contraste real, para que un equipo amarillo se lea igual de bien
+  que uno azul.
+- **Una acción principal por pantalla.** Solo la tarjeta más importante lleva
+  `class="destacada"`; si todo destaca, no destaca nada.
+- **La app se adapta al momento.** Antes del evento se abre la pestaña del
+  equipo (la novedad); el día del evento, el programa, con la actividad en
+  curso marcada. El texto de bienvenida desaparece cuando ya has confirmado.
+- **Accesible por defecto.** Foco visible en todo lo pulsable, `aria-selected`
+  en las pestañas (y flechas del teclado), avisos con `role="status"` y
+  respeto por «reducir movimiento» del sistema.

@@ -309,12 +309,14 @@ fieldset{border:0;margin:0;padding:0}
 .pestanas{display:flex;gap:6px;margin:var(--e4) 0 var(--e2);position:sticky;top:0;
           z-index:20;background:var(--fondo);padding:8px 0;
           box-shadow:0 8px 12px -10px rgba(35,35,31,.35)}
-.pestanas button{flex:1 1 0;min-width:0;padding:7px 1px 8px;border-radius:12px;
+.pestanas button{flex:1 1 0;min-width:0;padding:7px 1px;border-radius:12px;
                  border:1px solid var(--borde);background:var(--papel);font:inherit;
                  font-size:12.5px;font-weight:700;color:var(--tinta);cursor:pointer;
                  min-height:52px;line-height:1.25;transition:background .15s,color .15s;
-                 /* el nombre nunca se parte por la mitad («Progra/ma») */
-                 overflow-wrap:normal;word-break:normal}
+                 /* el texto va centrado, quepa en una línea o en dos, y el nombre
+                    nunca se parte por la mitad («Progra/ma») */
+                 display:flex;align-items:center;justify-content:center;
+                 text-align:center;overflow-wrap:normal;word-break:normal}
 .pestanas button:hover{background:var(--fondo)}
 .pestanas button.activa{background:var(--acento);border-color:var(--acento);
                         color:var(--acento-tinta);box-shadow:var(--sombra-media)}
