@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from datetime import date
 from urllib.parse import quote
 
@@ -83,130 +84,335 @@ def enlace_maps(lugar: dict) -> str:
     return ""
 
 
+def color_texto(fondo: str, grande: bool = False) -> str:
+    """
+    Blanco o tinta oscura, el que se lea mejor sobre ese color. Los equipos
+    eligen su color libremente (un amarillo con letras blancas no se lee).
+
+    `grande=True` para títulos: basta con 3:1 (WCAG para texto grande), así que
+    se prefiere el blanco, que es lo que da empaque al color del equipo. Para
+    texto pequeño se exige el máximo contraste posible.
+    """
+    color = (fondo or "").strip()
+    if len(color) != 7 or not color.startswith("#"):
+        return "#fff"
+    try:
+        r, g, b = (int(color[i:i + 2], 16) / 255 for i in (1, 3, 5))
+    except ValueError:
+        return "#fff"
+
+    def lineal(c: float) -> float:
+        return c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4
+
+    luminancia = 0.2126 * lineal(r) + 0.7152 * lineal(g) + 0.0722 * lineal(b)
+    # Contraste con blanco vs. con la tinta oscura (#23231F, luminancia ≈ 0.016)
+    contraste_blanco = 1.05 / (luminancia + 0.05)
+    contraste_tinta = (luminancia + 0.05) / 0.066
+    if grande:
+        return "#fff" if contraste_blanco >= 3.0 else "#23231F"
+    return "#fff" if contraste_blanco >= contraste_tinta else "#23231F"
+
+
+def iniciales(p: dict) -> str:
+    """Una o dos letras para el avatar de la persona."""
+    corto = nombre_corto(p)
+    partes = (p.get("nombre") or corto).split()
+    if len(partes) >= 2 and not (p.get("apodo") or "").strip():
+        return (partes[0][:1] + partes[1][:1]).upper()
+    return corto[:2].upper()
+
+
 ESTILO = """
-:root{--rojo:#CC0C18;--rojo-oscuro:#A50A13;--tinta:#2C2C2A;--gris:#6B6862;
-      --fondo:#F5F4F2;--borde:#E4E1DC;--verde:#1E9E5A;--ok-fondo:#E8F6EE}
+/* ---------------------------------------------------------------- 1. Tokens */
+:root{
+  /* Marca Nea Master + acento «olímpico» dorado */
+  --rojo:#CC0C18; --rojo-oscuro:#A50A13; --rojo-suave:#FCE9EA;
+  --oro:#E8A013; --oro-claro:#FFD766; --oro-suave:#FDF3DF;
+  /* El acento cambia al color del equipo en la página del participante */
+  --acento:#CC0C18; --acento-tinta:#fff;
+  /* Neutros */
+  --tinta:#23231F; --gris:#6B6862; --gris-claro:#8C887F;
+  --fondo:#F4F3F0; --papel:#FFFFFF; --borde:#E4E1DC; --borde-fuerte:#D5D1CA;
+  /* Semánticos */
+  --verde:#17834A; --ok-fondo:#E8F6EE; --ok-borde:#B7E3C9;
+  --ambar-fondo:#FFF7E0; --ambar-borde:#EAD48A;
+  --error-fondo:#FDECEC; --error-borde:#F3BFC2;
+  /* Espaciado y formas */
+  --e1:4px; --e2:8px; --e3:12px; --e4:16px; --e5:24px; --e6:32px;
+  --r-chico:10px; --r:14px; --r-grande:20px;
+  --sombra:0 1px 2px rgba(35,35,31,.06), 0 1px 3px rgba(35,35,31,.04);
+  --sombra-media:0 6px 20px -10px rgba(35,35,31,.28);
+  --sombra-alta:0 14px 32px -12px rgba(35,35,31,.35);
+}
+
+/* ------------------------------------------------------------- 2. Base */
 *{box-sizing:border-box}
-html{-webkit-text-size-adjust:100%}
+html{-webkit-text-size-adjust:100%;color-scheme:light}
 body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",
-     Arial,sans-serif;background:var(--fondo);color:var(--tinta);line-height:1.5;
-     font-size:16px}
-a{color:var(--rojo)}
-.contenedor{max-width:680px;margin:0 auto;padding:0 14px 40px}
-body.admin .contenedor{max-width:1100px}
-.cabecera{background:#fff;border-bottom:3px solid var(--rojo);padding:12px 0}
-.cabecera .contenedor{display:flex;align-items:center;gap:14px;padding-bottom:0;
-                      flex-wrap:wrap}
-.cabecera img{height:34px;display:block}
-.marca{font-size:20px;font-weight:700;letter-spacing:-.3px}
+     Arial,sans-serif;background:var(--fondo);color:var(--tinta);
+     line-height:1.55;font-size:16px;
+     -webkit-font-smoothing:antialiased;overflow-wrap:break-word}
+a{color:var(--rojo);text-underline-offset:2px}
+a:hover{color:var(--rojo-oscuro)}
+img{max-width:100%}
+:focus-visible{outline:3px solid rgba(204,12,24,.45);outline-offset:2px;
+               border-radius:6px}
+
+/* ------------------------------------------------------------- 3. Layout */
+.contenedor{max-width:660px;margin:0 auto;padding:0 16px calc(48px + env(safe-area-inset-bottom))}
+body.admin .contenedor{max-width:1120px}
+.cabecera{background:var(--papel);border-bottom:3px solid var(--acento);
+          padding:10px 0;box-shadow:var(--sombra)}
+.cabecera .contenedor{display:flex;align-items:center;gap:12px;padding-bottom:0;
+                      min-height:44px}
+.cabecera img{height:30px;display:block;flex:none}
+.marca{font-size:19px;font-weight:800;letter-spacing:-.35px;white-space:nowrap}
 .marca span{color:var(--rojo)}
-.tarjeta{background:#fff;border:1px solid var(--borde);border-radius:14px;
-         padding:16px;margin:12px 0;box-shadow:0 1px 3px rgba(0,0,0,.05)}
-h1{font-size:24px;margin:12px 0 4px}
-h2{font-size:17px;margin:0 0 10px}
-.etiqueta{font-size:12px;text-transform:uppercase;letter-spacing:.6px;
-          color:var(--gris);font-weight:600;margin-bottom:4px}
-.chip{display:inline-block;background:var(--fondo);border:1px solid var(--borde);
-      border-radius:999px;padding:3px 10px;margin:2px;font-size:14px}
-.chip.yo{background:#FCE9EA;border-color:var(--rojo);font-weight:600}
-.insignia{display:inline-block;border-radius:999px;padding:1px 8px;font-size:12px;
-          font-weight:600;white-space:nowrap}
-.insignia.ok{background:var(--ok-fondo);color:var(--verde)}
-.insignia.no{background:#FDECEC;color:var(--rojo)}
-.insignia.pte{background:#F1EFEC;color:var(--gris)}
-.boton{display:inline-block;background:var(--rojo);color:#fff;border:0;
-       border-radius:10px;padding:10px 16px;font-size:15px;font-weight:600;
-       cursor:pointer;text-decoration:none;text-align:center;font-family:inherit}
-.boton:hover{background:var(--rojo-oscuro)}
-.boton.secundario{background:#fff;color:var(--tinta);border:1px solid var(--borde)}
-.boton.secundario:hover{background:var(--fondo)}
-.boton.mini{padding:4px 10px;font-size:13px;border-radius:8px}
-.boton.bloque{display:block;width:100%}
-input,select,textarea{font:inherit;border:1px solid var(--borde);border-radius:8px;
-                      padding:8px 10px;background:#fff;color:var(--tinta);
-                      max-width:100%}
-input:focus,select:focus,textarea:focus{outline:2px solid #F0B6BA;
-                                        border-color:var(--rojo)}
-label{font-size:13px;color:var(--gris);display:block;margin:8px 0 2px;font-weight:600}
-form.linea{display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin:0}
-form.compacta{display:inline;margin:0}
-.tabla{width:100%;border-collapse:collapse;font-size:14px}
-.tabla th{text-align:left;color:var(--gris);font-size:12px;text-transform:uppercase;
-          letter-spacing:.5px}
-.tabla th,.tabla td{padding:8px;border-bottom:1px solid var(--borde);
-                    vertical-align:middle}
-.envoltorio-tabla{overflow-x:auto}
-.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));
-      gap:10px;margin:12px 0}
-.kpi{background:#fff;border:1px solid var(--borde);border-radius:12px;padding:12px}
-.kpi .valor{font-size:26px;font-weight:700}
-.kpi .texto{font-size:13px;color:var(--gris)}
-.navadmin{display:flex;gap:6px;flex-wrap:wrap;margin:14px 0}
-.navadmin a{padding:7px 13px;border-radius:999px;text-decoration:none;
-            color:var(--tinta);background:#fff;border:1px solid var(--borde);
-            font-size:14px;font-weight:600}
-.navadmin a.activo{background:var(--rojo);border-color:var(--rojo);color:#fff}
-.aviso{border-radius:10px;padding:10px 14px;margin:10px 0;font-size:14px;
-       background:#FFF7E0;border:1px solid #EAD48A}
-.aviso.ok{background:var(--ok-fondo);border-color:#BFE5CE}
-.aviso.error{background:#FDECEC;border-color:#F0B6BA}
-.agenda-item{display:flex;gap:12px;padding:10px 0;border-bottom:1px dashed var(--borde)}
-.agenda-item:last-child{border-bottom:0}
-.agenda-hora{min-width:62px;font-weight:700;color:var(--rojo);
-             font-variant-numeric:tabular-nums}
-.agenda-texto{flex:1}
-.agenda-lugar{font-size:14px;color:var(--gris)}
-.equipo-cinta{height:8px;border-radius:14px 14px 0 0;margin:-16px -16px 12px}
-.equipo-nombre{font-size:22px;font-weight:700}
-.pie{color:var(--gris);font-size:13px;text-align:center;margin-top:28px}
+.pie{color:var(--gris);font-size:13px;text-align:center;margin-top:var(--e6)}
 .pie a{color:var(--gris)}
-details summary{cursor:pointer;color:var(--gris);font-size:14px;margin-top:8px}
-.fecha-chip{display:inline-block;background:#FCE9EA;color:var(--rojo);
-            border-radius:999px;padding:3px 12px;font-weight:600;font-size:14px;
-            margin:6px 0}
-.acciones{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
-.silencio{color:var(--gris);font-size:14px}
-.punto-color{display:inline-block;width:14px;height:14px;border-radius:50%;
-             vertical-align:-2px;margin-right:6px}
-.selector-personas{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0}
-.selector-personas label{display:inline-flex;align-items:center;gap:6px;
-                         background:var(--fondo);border:1px solid var(--borde);
-                         border-radius:999px;padding:5px 12px;font-size:14px;
-                         cursor:pointer;margin:0;color:var(--tinta);font-weight:400}
-.selector-personas label:has(input:checked){background:#FCE9EA;
-                                            border-color:var(--rojo);font-weight:600}
-.selector-personas input{margin:0;accent-color:var(--rojo)}
-.regla-juntos{display:flex;align-items:center;gap:10px;flex-wrap:wrap;
-              padding:8px 0;border-bottom:1px dashed var(--borde)}
-.regla-juntos:last-of-type{border-bottom:0}
-.pestanas{display:flex;gap:6px;margin:14px 0 2px}
-.pestanas button{flex:1;padding:9px 4px;border-radius:999px;
-                 border:1px solid var(--borde);background:#fff;font:inherit;
-                 font-size:14px;font-weight:600;color:var(--tinta);cursor:pointer}
-.pestanas button.activa{background:var(--rojo);border-color:var(--rojo);color:#fff}
-.panel-pestana{display:none}
+
+/* --------------------------------------------------------- 4. Tipografía */
+h1{font-size:clamp(22px,5.6vw,28px);line-height:1.2;margin:var(--e4) 0 var(--e1);
+   letter-spacing:-.5px;font-weight:800;text-wrap:balance}
+h2{font-size:18px;line-height:1.3;margin:0 0 var(--e3);letter-spacing:-.2px;
+   font-weight:700;text-wrap:balance}
+h3{font-size:15px;margin:0 0 var(--e2);font-weight:700}
+p{text-wrap:pretty}
+.etiqueta{font-size:11.5px;text-transform:uppercase;letter-spacing:.8px;
+          color:var(--gris-claro);font-weight:700;margin-bottom:var(--e1)}
+.silencio{color:var(--gris);font-size:14.5px}
+.meta{display:flex;flex-wrap:wrap;gap:4px 12px;color:var(--gris);font-size:14.5px;
+      align-items:center}
+.meta span{white-space:nowrap}
+
+/* --------------------------------------------------------- 5. Componentes */
+/* Tarjetas */
+.tarjeta{background:var(--papel);border:1px solid var(--borde);border-radius:var(--r);
+         padding:var(--e4);margin:var(--e3) 0;box-shadow:var(--sombra)}
+.tarjeta.destacada{border-color:var(--acento);box-shadow:var(--sombra-media)}
+.tarjeta.plana{box-shadow:none}
+.tarjeta > :last-child{margin-bottom:0}
+
+/* Botones */
+.boton{display:inline-flex;align-items:center;justify-content:center;gap:6px;
+       background:var(--rojo);color:#fff;border:1px solid var(--rojo);
+       border-radius:var(--r-chico);padding:11px 18px;font-size:15px;font-weight:700;
+       cursor:pointer;text-decoration:none;text-align:center;font-family:inherit;
+       min-height:44px;transition:background .15s,transform .1s,box-shadow .15s}
+.boton:hover{background:var(--rojo-oscuro);border-color:var(--rojo-oscuro);color:#fff}
+.boton:active{transform:translateY(1px)}
+.boton.secundario{background:var(--papel);color:var(--tinta);border-color:var(--borde-fuerte)}
+.boton.secundario:hover{background:var(--fondo);color:var(--tinta)}
+.boton.mini{padding:6px 12px;font-size:13.5px;border-radius:8px;min-height:34px}
+.boton.bloque{display:flex;width:100%}
+.boton[disabled]{opacity:.5;cursor:not-allowed}
+
+/* Formularios */
+input,select,textarea{font:inherit;font-size:16px;border:1px solid var(--borde-fuerte);
+                      border-radius:var(--r-chico);padding:9px 11px;
+                      background:var(--papel);color:var(--tinta);max-width:100%;
+                      min-height:42px}
+textarea{min-height:auto;line-height:1.5}
+input:hover,select:hover,textarea:hover{border-color:var(--gris-claro)}
+input:focus,select:focus,textarea:focus{outline:3px solid rgba(204,12,24,.28);
+                                        outline-offset:0;border-color:var(--rojo)}
+input[type=color]{padding:3px;min-height:42px;cursor:pointer}
+input[type=file]{padding:8px;background:var(--fondo)}
+label{font-size:13px;color:var(--gris);display:block;margin:var(--e3) 0 var(--e1);
+      font-weight:700;letter-spacing:.1px}
+form.linea{display:flex;gap:var(--e2);flex-wrap:wrap;align-items:flex-end;margin:0}
+form.linea > div{display:flex;flex-direction:column}
+form.linea label{margin-top:0}
+form.compacta{display:inline;margin:0}
+fieldset{border:0;margin:0;padding:0}
+
+/* Chips e insignias */
+.chip{display:inline-flex;align-items:center;gap:6px;background:var(--fondo);
+      border:1px solid var(--borde);border-radius:999px;padding:5px 12px;
+      margin:3px 3px 0 0;font-size:14.5px;line-height:1.35}
+.chip.yo{background:var(--rojo-suave);border-color:var(--rojo);font-weight:700}
+.chip.incognita{color:var(--gris-claro);border-style:dashed;font-weight:700;
+                letter-spacing:1px;min-width:44px;justify-content:center}
+.insignia{display:inline-flex;align-items:center;gap:4px;border-radius:999px;
+          padding:2px 9px;font-size:12.5px;font-weight:700;white-space:nowrap}
+.insignia.ok{background:var(--ok-fondo);color:var(--verde)}
+.insignia.no{background:var(--error-fondo);color:var(--rojo)}
+.insignia.pte{background:#F0EEEA;color:var(--gris)}
+.punto-color{display:inline-block;width:12px;height:12px;border-radius:50%;
+             flex:none;margin-right:7px;vertical-align:-1px;
+             box-shadow:0 0 0 1px rgba(0,0,0,.08) inset}
+.inicial{display:inline-flex;align-items:center;justify-content:center;
+         width:24px;height:24px;border-radius:50%;font-size:12px;font-weight:800;
+         color:#fff;flex:none;letter-spacing:0}
+.fecha-chip{display:inline-flex;align-items:center;gap:6px;background:var(--rojo-suave);
+            color:var(--rojo);border-radius:999px;padding:5px 14px;font-weight:700;
+            font-size:14px;margin:var(--e2) 0 0}
+.pulso{width:8px;height:8px;border-radius:50%;background:var(--verde);flex:none;
+       animation:latido 2s ease-in-out infinite}
+@keyframes latido{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.35;transform:scale(.8)}}
+.en-directo{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;
+            color:var(--gris);font-weight:600}
+
+/* Avisos */
+.aviso{border-radius:var(--r-chico);padding:12px 14px;margin:var(--e3) 0;
+       font-size:14.5px;background:var(--ambar-fondo);border:1px solid var(--ambar-borde)}
+.aviso.ok{background:var(--ok-fondo);border-color:var(--ok-borde)}
+.aviso.error{background:var(--error-fondo);border-color:var(--error-borde)}
+.aviso :last-child{margin-bottom:0}
+
+/* Tablas */
+.tabla{width:100%;border-collapse:collapse;font-size:14.5px}
+.tabla th{text-align:left;color:var(--gris-claro);font-size:11.5px;
+          text-transform:uppercase;letter-spacing:.7px;font-weight:700;
+          padding-bottom:var(--e2)}
+.tabla th,.tabla td{padding:10px 10px;border-bottom:1px solid var(--borde);
+                    vertical-align:middle}
+.tabla tr:last-child td{border-bottom:0}
+.tabla td:first-child,.tabla th:first-child{padding-left:0}
+.tabla td:last-child,.tabla th:last-child{padding-right:0}
+.envoltorio-tabla{overflow-x:auto;-webkit-overflow-scrolling:touch}
+.nowrap{white-space:nowrap}
+@media (max-width:620px){.solo-ancho{display:none}}
+
+/* KPIs */
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));
+      gap:var(--e2);margin:var(--e3) 0}
+.kpi{background:var(--papel);border:1px solid var(--borde);border-radius:var(--r);
+     padding:var(--e3) var(--e4);box-shadow:var(--sombra)}
+.kpi .valor{font-size:28px;font-weight:800;line-height:1.1;letter-spacing:-1px;
+            font-variant-numeric:tabular-nums}
+.kpi .texto{font-size:13px;color:var(--gris);margin-top:2px}
+.barra{height:8px;border-radius:999px;background:var(--fondo);overflow:hidden;
+       margin-top:var(--e2)}
+.barra > span{display:block;height:100%;border-radius:999px;background:var(--acento)}
+
+/* Navegación del panel */
+.navadmin{display:flex;gap:6px;margin:var(--e3) 0;overflow-x:auto;padding-bottom:4px;
+          scrollbar-width:thin;-webkit-overflow-scrolling:touch;
+          /* se difumina por la derecha: se ve que hay más pestañas al deslizar */
+          -webkit-mask-image:linear-gradient(90deg,#000 88%,transparent);
+          mask-image:linear-gradient(90deg,#000 88%,transparent)}
+@media (min-width:1000px){.navadmin{-webkit-mask-image:none;mask-image:none}}
+.navadmin a{padding:9px 14px;border-radius:999px;text-decoration:none;
+            color:var(--tinta);background:var(--papel);border:1px solid var(--borde);
+            font-size:14px;font-weight:700;white-space:nowrap;flex:none}
+.navadmin a:hover{border-color:var(--borde-fuerte);background:var(--fondo)}
+.navadmin a.activo{background:var(--rojo);border-color:var(--rojo);color:#fff}
+.navadmin .salir{margin-left:auto;color:var(--gris)}
+
+/* Pestañas del participante (barra fija arriba) */
+/* Barra de secciones tipo app: el emoji cae solo en la primera línea y el
+   nombre debajo, así entran las cuatro sin apretarse ni en pantallas de 320px */
+.pestanas{display:flex;gap:6px;margin:var(--e4) 0 var(--e2);position:sticky;top:0;
+          z-index:20;background:var(--fondo);padding:8px 0;
+          box-shadow:0 8px 12px -10px rgba(35,35,31,.35)}
+.pestanas button{flex:1 1 0;min-width:0;padding:7px 2px 8px;border-radius:12px;
+                 border:1px solid var(--borde);background:var(--papel);font:inherit;
+                 font-size:12.5px;font-weight:700;color:var(--tinta);cursor:pointer;
+                 min-height:52px;line-height:1.25;transition:background .15s,color .15s}
+.pestanas button:hover{background:var(--fondo)}
+.pestanas button.activa{background:var(--acento);border-color:var(--acento);
+                        color:var(--acento-tinta);box-shadow:var(--sombra-media)}
+.panel-pestana{display:none;animation:entra .25s ease}
 .panel-pestana.activa{display:block}
-.chip.incognita{opacity:.55;font-weight:700;letter-spacing:1px}
-.historia{margin:10px 0 0}
-.historia p{opacity:0;animation:aparece .7s ease forwards;margin:7px 0;font-size:17px}
+@keyframes entra{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+
+/* Agenda */
+.agenda-item{display:flex;gap:var(--e3);padding:12px 0;
+             border-bottom:1px dashed var(--borde)}
+.agenda-item:last-child{border-bottom:0}
+.agenda-item.ahora{background:var(--oro-suave);border-radius:var(--r-chico);
+                   padding:12px;margin:0 -12px;border-bottom:0}
+.agenda-hora{min-width:58px;font-weight:800;color:var(--acento);
+             font-variant-numeric:tabular-nums;font-size:15px;line-height:1.4}
+.agenda-texto{flex:1;min-width:0}
+.agenda-lugar{font-size:14px;color:var(--gris);margin-top:2px}
+.agenda-lugar a{color:var(--gris);text-decoration:underline}
+.agenda-lugar a:hover{color:var(--rojo)}
+
+/* Equipo */
+.equipo-cabecera{margin:calc(var(--e4) * -1) calc(var(--e4) * -1) var(--e4);
+                 padding:var(--e4);border-radius:var(--r) var(--r) 0 0;
+                 background:var(--acento);color:var(--acento-tinta)}
+.equipo-nombre{font-size:26px;font-weight:800;letter-spacing:-.5px;line-height:1.1;
+               display:flex;align-items:center;gap:10px}
+.equipo-cabecera .etiqueta{color:inherit;opacity:.8}
+
+/* Podio de la clasificación */
+.podio{display:flex;flex-direction:column;gap:var(--e2);margin:var(--e3) 0}
+.podio-fila{display:flex;align-items:center;gap:var(--e3)}
+.podio-puesto{font-size:20px;width:28px;text-align:center;flex:none}
+.podio-cuerpo{flex:1;min-width:0}
+.podio-nombre{display:flex;justify-content:space-between;gap:var(--e2);
+              font-weight:700;font-size:15px;align-items:baseline}
+.podio-total{font-variant-numeric:tabular-nums;font-weight:800}
+.podio-barra{height:10px;border-radius:999px;background:var(--fondo);
+             overflow:hidden;margin-top:5px}
+.podio-barra > span{display:block;height:100%;border-radius:999px;
+                    transition:width .6s ease}
+.lista-datos > div{padding:5px 0;border-bottom:1px dashed var(--borde);font-size:14.5px}
+.lista-datos > div:last-child{border-bottom:0}
+/* Rejilla para meter los tiempos de los karts: una columna por equipo */
+.rejilla-tiempos{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
+                 gap:var(--e4) var(--e5)}
+.fila-tiempo{display:flex;align-items:center;justify-content:space-between;gap:var(--e2);
+             padding:4px 0}
+.fila-tiempo label{margin:0;font-weight:600;color:var(--tinta);font-size:14.5px}
+.fila-tiempo input{width:110px;flex:none;font-variant-numeric:tabular-nums}
+
+/* Utilidades y varios */
+.acciones{display:flex;gap:var(--e2);flex-wrap:wrap;align-items:center}
+details summary{cursor:pointer;color:var(--gris);font-size:14px;margin-top:var(--e2);
+                font-weight:600}
+details summary:hover{color:var(--rojo)}
+.selector-personas{display:flex;flex-wrap:wrap;gap:6px;margin:var(--e2) 0}
+.selector-personas label{display:inline-flex;align-items:center;gap:7px;
+                         background:var(--fondo);border:1px solid var(--borde);
+                         border-radius:999px;padding:7px 13px;font-size:14px;
+                         cursor:pointer;margin:0;color:var(--tinta);font-weight:500;
+                         min-height:38px}
+.selector-personas label:hover{border-color:var(--borde-fuerte)}
+.selector-personas label:has(input:checked){background:var(--rojo-suave);
+                                            border-color:var(--rojo);font-weight:700}
+.selector-personas input{margin:0;accent-color:var(--rojo);min-height:auto;
+                         width:16px;height:16px}
+.regla-juntos{display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+              padding:10px 0;border-bottom:1px dashed var(--borde)}
+.regla-juntos:last-of-type{border-bottom:0}
+.paso{display:flex;align-items:flex-start;gap:10px;padding:9px 0;
+      border-bottom:1px dashed var(--borde);font-size:14.5px}
+.paso:last-child{border-bottom:0}
+.paso-icono{flex:none;font-size:15px;width:22px;text-align:center}
+.paso.hecho{color:var(--gris)}
+/* En pantalla ancha, los preparativos en dos columnas: se ven de una ojeada */
+@media (min-width:800px){
+  .preparativos{display:grid;grid-template-columns:1fr 1fr;column-gap:var(--e5)}
+  .preparativos .paso:nth-last-child(2){border-bottom:0}
+}
+
+/* ------------------------------------------------- 6. Sorteo (espectáculo) */
+.historia{margin:var(--e3) 0 0}
+.historia p{opacity:0;animation:aparece .7s ease forwards;margin:9px 0;
+            font-size:17px;line-height:1.45}
 .aparece-tarde{opacity:0;animation:aparece .7s ease forwards}
 @keyframes aparece{to{opacity:1}}
-.sorteo-escena{text-align:center;padding:8px 0 4px}
-.caja-sorteo{width:200px;height:200px;margin:22px auto 10px;border-radius:28px;
-             background:linear-gradient(150deg,#FFD766,#E8A013);padding:12px;
-             box-shadow:0 8px 24px rgba(0,0,0,.20);transition:transform .35s}
-.caja-sorteo .baldosa{width:100%;height:100%;border-radius:18px;background:#fff;
+.sorteo-escena{text-align:center;padding:var(--e2) 0 var(--e1)}
+.caja-sorteo{width:min(200px,58vw);aspect-ratio:1;margin:var(--e5) auto var(--e3);
+             border-radius:28px;background:linear-gradient(150deg,var(--oro-claro),var(--oro));
+             padding:12px;box-shadow:var(--sombra-alta);transition:transform .35s}
+.caja-sorteo .baldosa{width:100%;height:100%;border-radius:18px;background:var(--papel);
                       display:flex;align-items:center;justify-content:center;
-                      font-size:88px;font-weight:800;color:#E8A013;
+                      font-size:min(88px,26vw);font-weight:800;color:var(--oro);
                       transition:background .06s;user-select:none;line-height:1}
 .caja-sorteo.girando{animation:tiembla .22s infinite}
 @keyframes tiembla{0%{transform:rotate(-1.5deg) scale(1.02)}
                    50%{transform:rotate(1.5deg) scale(1.02)}
                    100%{transform:rotate(-1.5deg) scale(1.02)}}
 .caja-sorteo.ganador{transform:scale(1.12)}
-.sorteo-equipo{font-size:28px;font-weight:800;min-height:40px;margin:6px 0}
+.sorteo-equipo{font-size:28px;font-weight:800;min-height:40px;margin:var(--e2) 0;
+               letter-spacing:-.5px}
 .sorteo-resultado{display:none}
-.boton.gordo{font-size:18px;padding:14px 26px;border-radius:14px;
+.boton.gordo{font-size:18px;padding:15px 28px;border-radius:var(--r);min-height:52px;
              animation:late 1.6s ease-out infinite}
 .boton.gordo.aparece-tarde{opacity:0;
              animation:aparece .7s ease forwards, late 1.6s ease-out infinite}
@@ -216,7 +422,34 @@ details summary{cursor:pointer;color:var(--gris);font-size:14px;margin-top:8px}
 .confeti{position:fixed;top:42%;left:50%;width:12px;height:12px;border-radius:3px;
          pointer-events:none;z-index:50;animation:vuela 1.2s ease-out forwards}
 @keyframes vuela{to{transform:translate(var(--dx),var(--dy)) rotate(720deg);opacity:0}}
-@media (max-width:520px){h1{font-size:21px}.agenda-hora{min-width:52px}}
+
+/* ------------------------------------------------------- 7. Adaptaciones */
+@media (max-width:420px){
+  .contenedor{padding-left:13px;padding-right:13px}
+  .tarjeta{padding:var(--e3)}
+  .equipo-cabecera{margin:calc(var(--e3) * -1) calc(var(--e3) * -1) var(--e3);
+                   padding:var(--e3)}
+  .pestanas button{font-size:11.5px}
+  .agenda-hora{min-width:52px}
+  .kpi{padding:var(--e3)}
+  .kpi .valor{font-size:24px}
+}
+@media (min-width:900px){
+  .navadmin{position:sticky;top:0;z-index:10;background:var(--fondo);
+            padding-top:var(--e3)}
+}
+/* Quien pida menos movimiento ve la app quieta (el sorteo sigue funcionando) */
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation-duration:.01ms !important;
+                       animation-iteration-count:1 !important;
+                       transition-duration:.01ms !important;
+                       scroll-behavior:auto !important}
+  .historia p,.aparece-tarde{opacity:1}
+}
+@media print{
+  .navadmin,.pestanas,.boton{display:none}
+  .tarjeta{break-inside:avoid;box-shadow:none}
+}
 """
 
 # Animación del sorteo: la caja va pasando por los equipos cada vez más despacio
@@ -293,35 +526,49 @@ function copiar(btn){
 """
 
 
-def base(titulo: str, cuerpo: str, *, admin: bool = False, avisos=None) -> str:
+def base(titulo: str, cuerpo: str, *, admin: bool = False, avisos=None,
+         acento: str | None = None) -> str:
+    """
+    Envoltorio común de todas las páginas. `acento` tiñe la interfaz con el
+    color del equipo del participante (línea de la cabecera, pestañas, horas…).
+    """
     favicon = '<link rel="icon" href="/assets/neamaster_icono.png">' if HAY_ICONO else ""
     logo = ('<img src="/assets/neamaster_horizontal.png" alt="Nea Master">'
             if HAY_LOGO else "")
     html_avisos = ""
     for categoria, texto in (avisos or []):
         clase = categoria if categoria in ("ok", "error") else ""
-        html_avisos += f'<div class="aviso {clase}">{e(texto)}</div>'
+        icono = {"ok": "✅", "error": "⛔"}.get(categoria, "ℹ️")
+        html_avisos += (f'<div class="aviso {clase}" role="status">{icono} '
+                        f'{e(texto)}</div>')
+    tema = "#CC0C18"
+    estilo_acento = ""
+    if acento and re.fullmatch(r"#[0-9A-Fa-f]{6}", acento):
+        tema = acento
+        estilo_acento = (f'<style>:root{{--acento:{acento};'
+                         f'--acento-tinta:{color_texto(acento, grande=True)}}}</style>')
     return f"""<!doctype html>
 <html lang="es">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="theme-color" content="#CC0C18">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="{e(tema)}">
 <meta name="robots" content="noindex">
+<meta name="description" content="{e(titulo)} — Nea Master">
 <title>{e(titulo)}</title>
 {favicon}
-<style>{ESTILO}</style>
+<style>{ESTILO}</style>{estilo_acento}
 <script>{GUION}</script>
 </head>
 <body class="{'admin' if admin else ''}">
-<div class="cabecera"><div class="contenedor">
+<header class="cabecera"><div class="contenedor">
   {logo}
   <div class="marca">Nea<span>Evento</span></div>
-</div></div>
-<div class="contenedor">
+</div></header>
+<main class="contenedor">
 {html_avisos}
 {cuerpo}
-</div>
+</main>
 </body>
 </html>"""
 
@@ -332,21 +579,27 @@ def render_portada(cfg: dict, referencia: date) -> str:
     contador = cuenta_atras(cfg.get("fecha", ""), referencia)
     chip = f'<span class="fecha-chip">{e(contador)}</span>' if contador else ""
     cuerpo = f"""
-<h1>{e(cfg.get('nombre'))}</h1>
-<div class="silencio">📅 {e(fecha_bonita(cfg.get('fecha', '')))}
- · 🕘 {e(cfg.get('hora'))} h</div>
-{chip}
+<div style="text-align:center;padding:var(--e5) 0 var(--e2)">
+  <div style="font-size:52px;line-height:1">🏅</div>
+  <h1 style="margin:var(--e2) 0 var(--e1)">{e(cfg.get('nombre'))}</h1>
+  <div class="meta" style="justify-content:center">
+    <span>📅 {e(fecha_bonita(cfg.get('fecha', '')))}</span>
+    <span>🕘 {e(cfg.get('hora'))} h</span>
+  </div>
+  <div>{chip}</div>
+</div>
 <div class="tarjeta">
   <p style="margin-top:0">{e(cfg.get('descripcion'))}</p>
   <p class="silencio">Cada participante tiene un <strong>enlace personal</strong>
   donde ve su equipo, el programa del día y los lugares. Si no lo has recibido,
   pide el tuyo a la organización.</p>
   <form class="linea" method="post" action="/ir">
-    <div>
+    <div style="flex:1;min-width:160px">
       <label for="codigo">¿Tienes ya tu código?</label>
-      <input id="codigo" name="codigo" placeholder="Código del enlace" required>
+      <input id="codigo" name="codigo" placeholder="Código del enlace" required
+             autocomplete="off" style="width:100%">
     </div>
-    <button class="boton secundario" type="submit">Entrar</button>
+    <button class="boton" type="submit">Entrar</button>
   </form>
 </div>
 <div class="pie">Nea Master · <a href="/admin">organización</a></div>
@@ -357,8 +610,9 @@ def render_portada(cfg: dict, referencia: date) -> str:
 def render_no_encontrado(cfg: dict) -> str:
     contacto = e(cfg.get("contacto")) or "la organización"
     cuerpo = f"""
-<div class="tarjeta">
-  <h2>😕 Enlace no válido</h2>
+<div class="tarjeta" style="margin-top:var(--e5);text-align:center">
+  <div style="font-size:44px;line-height:1">😕</div>
+  <h2>Enlace no válido</h2>
   <p>Este enlace no corresponde a ningún participante. Puede que esté incompleto
   (al copiarlo se cortó) o que la organización lo haya renovado.</p>
   <p class="silencio">Pide tu enlace de nuevo a {contacto}.</p>
@@ -436,6 +690,10 @@ var RUTA_REVELADO = {json.dumps(ruta_revelado)};
 
 
 def _bloque_asistencia(p: dict, cfg: dict) -> str:
+    """
+    Pendiente de responder → tarjeta destacada (es LA acción de la página).
+    Ya respondido → una línea discreta: la página pasa a ser la guía del día.
+    """
     boton_si = ('<button class="boton" type="submit" name="valor" value="si">'
                 '✅ ¡Sí, voy!</button>')
     boton_no = ('<button class="boton secundario" type="submit" name="valor" value="no">'
@@ -444,15 +702,17 @@ def _bloque_asistencia(p: dict, cfg: dict) -> str:
                   f'{boton_si} {boton_no}</form>')
     if p["confirmado"] == 1:
         return f"""
-<div class="aviso ok">✅ <strong>Has confirmado tu asistencia.</strong> ¡Te esperamos!
-<details><summary>Cambiar mi respuesta</summary>{formulario}</details></div>"""
+<div class="aviso ok" style="padding:9px 13px">
+  <strong>Has confirmado tu asistencia.</strong> ¡Te esperamos!
+  <details><summary>Cambiar mi respuesta</summary>{formulario}</details>
+</div>"""
     if p["confirmado"] == -1:
         return f"""
-<div class="aviso">😔 Has indicado que <strong>no puedes venir</strong>.
-Si cambias de planes, aquí te esperamos.
+<div class="aviso" style="padding:9px 13px">😔 Has dicho que
+<strong>no puedes venir</strong>. Si cambias de planes, aquí te esperamos.
 <details><summary>Cambiar mi respuesta</summary>{formulario}</details></div>"""
     return f"""
-<div class="tarjeta" style="border-color:var(--rojo)">
+<div class="tarjeta destacada">
   <h2>¿Contamos contigo el {e(fecha_bonita(cfg.get('fecha', '')))}?</h2>
   {formulario}
 </div>"""
@@ -465,48 +725,64 @@ def _texto_contador(n_dentro: int, n_pendientes: int) -> str:
     return f"¡Equipo completo! Ya estáis los {n_dentro}."
 
 
+def _chip_miembro(m: dict, p: dict, color: str, capitan_id) -> str:
+    """Un compañero de equipo: avatar con sus iniciales, apodo y corona si manda."""
+    corona = "👑 " if m["id"] == capitan_id else ""
+    avatar = (f'<span class="inicial" style="background:{e(color)};'
+              f'color:{color_texto(color)}" aria-hidden="true">{e(iniciales(m))}</span>')
+    if m["id"] == p["id"]:
+        return f'<span class="chip yo">{avatar}{corona}{e(nombre_corto(m))} (tú)</span>'
+    return (f'<span class="chip" title="{e(m["nombre"])}">{avatar}{corona}'
+            f'{e(nombre_corto(m))}</span>')
+
+
 def _bloque_equipo(p: dict, equipo: dict | None, companeros: list[dict]) -> str:
     if not equipo:
         return """
 <div class="tarjeta">
   <div class="etiqueta">Tu equipo</div>
-  <p style="margin:4px 0">🎲 Todavía no tienes equipo asignado.</p>
+  <p style="margin:4px 0;font-size:17px">🎲 Todavía no tienes equipo asignado.</p>
   <p class="silencio" style="margin:0">Cuando se haga el reparto lo verás aquí
   mismo: vuelve a abrir este enlace más adelante.</p>
 </div>"""
-    color = e(equipo.get("color") or "#CC0C18")
+    color = equipo.get("color") or "#CC0C18"
     emoji = e(equipo.get("emoji"))
     # Solo se muestran los compañeros que YA pasaron por el sorteo; el resto
     # son incógnitas que se van desvelando en directo (la página se refresca sola).
     dentro = [m for m in companeros if m.get("revelado_en")]
     pendientes = len(companeros) - len(dentro)
-    chips = ""
-    for m in dentro:
-        corona = "👑 " if m["id"] == equipo.get("capitan_id") else ""
-        if m["id"] == p["id"]:
-            chips += f'<span class="chip yo">{corona}{e(nombre_corto(m))} (tú)</span>'
-        else:
-            chips += (f'<span class="chip" title="{e(m["nombre"])}">'
-                      f'{corona}{e(nombre_corto(m))}</span>')
-    chips += '<span class="chip incognita">?</span>' * pendientes
-    descripcion = (f'<p class="silencio" style="margin:4px 0 10px">'
-                   f'{e(equipo.get("descripcion"))}</p>'
+    total = len(companeros) or 1
+    chips = "".join(_chip_miembro(m, p, color, equipo.get("capitan_id")) for m in dentro)
+    chips += ('<span class="chip incognita" title="Aún no ha pasado por el sorteo">?'
+              '</span>') * pendientes
+    descripcion = (f'<p style="margin:0;opacity:.9">{e(equipo.get("descripcion"))}</p>'
                    if equipo.get("descripcion") else "")
     return f"""
 <div class="tarjeta">
-  <div class="equipo-cinta" style="background:{color}"></div>
-  <div class="etiqueta">Tu equipo</div>
-  <div class="equipo-nombre">{emoji} {e(equipo['nombre'])}</div>
-  {descripcion}
-  <div class="etiqueta" style="margin-top:10px">El equipo</div>
+  <div class="equipo-cabecera">
+    <div class="etiqueta">Tu equipo</div>
+    <div class="equipo-nombre">{emoji} {e(equipo['nombre'])}</div>
+    {descripcion}
+  </div>
+  <div class="etiqueta">El equipo
+    <span class="en-directo" style="float:right;text-transform:none;letter-spacing:0">
+    <span class="pulso"></span> en directo</span>
+  </div>
   <div id="chips-equipo">{chips}</div>
-  <p class="silencio" id="contador-equipo" style="margin:8px 0 0">
+  <div class="barra"><span style="width:{round(len(dentro) / total * 100)}%;
+       background:{e(color)}"></span></div>
+  <p class="silencio" id="contador-equipo" style="margin:8px 0 0" aria-live="polite">
   {e(_texto_contador(len(dentro), pendientes))}</p>
 </div>"""
 
 
-def _item_agenda(a: dict, mostrar_equipo: bool = True) -> str:
-    horas = e(a["hora"]) + (f" – {e(a['hora_fin'])}" if a.get("hora_fin") else "")
+def _minutos(hhmm: str) -> int | None:
+    m = re.fullmatch(r"\s*(\d{1,2}):(\d{2})\s*", hhmm or "")
+    return int(m.group(1)) * 60 + int(m.group(2)) if m else None
+
+
+def _item_agenda(a: dict, mostrar_equipo: bool = True, estado: str = "") -> str:
+    horas = e(a["hora"]) + (f"<br>– {e(a['hora_fin'])}" if a.get("hora_fin") else "")
     lugar = ""
     if a.get("lugar_nombre"):
         url = enlace_maps({"maps": a.get("lugar_maps"), "direccion": a.get("lugar_direccion")})
@@ -520,22 +796,57 @@ def _item_agenda(a: dict, mostrar_equipo: bool = True) -> str:
         color = e(a.get("equipo_color") or "#CC0C18")
         insignia = (f' <span class="insignia" style="background:{color}1A;color:{color}">'
                     f'{e(a.get("equipo_emoji"))} {e(a.get("equipo_nombre"))}</span>')
+    if estado == "ahora":
+        insignia = ('<span class="insignia" style="background:var(--oro);color:#fff">'
+                    '● AHORA</span> ') + insignia
+    elif estado == "siguiente":
+        insignia = '<span class="insignia pte">SIGUIENTE</span> ' + insignia
     descripcion = (f'<div class="silencio">{e(a["descripcion"])}</div>'
                    if a.get("descripcion") else "")
     return f"""
-<div class="agenda-item">
+<div class="agenda-item{' ahora' if estado == 'ahora' else ''}">
   <div class="agenda-hora">{horas}</div>
-  <div class="agenda-texto"><strong>{e(a['actividad'])}</strong>{insignia}
+  <div class="agenda-texto">{insignia}<strong>{e(a['actividad'])}</strong>
   {descripcion}{lugar}</div>
 </div>"""
 
 
-def _bloque_agenda(agenda: list[dict]) -> str:
+def _estados_agenda(agenda: list[dict], hora_actual: str | None) -> dict[int, str]:
+    """El día del evento marca qué actividad está EN CURSO y cuál es la siguiente."""
+    ahora = _minutos(hora_actual or "")
+    if ahora is None:
+        return {}
+    estados: dict[int, str] = {}
+    en_curso = None
+    for i, a in enumerate(agenda):
+        inicio = _minutos(a.get("hora") or "")
+        if inicio is None or inicio > ahora:
+            continue
+        fin = _minutos(a.get("hora_fin") or "")
+        siguiente_inicio = next(
+            (_minutos(b.get("hora") or "") for b in agenda[i + 1:]
+             if _minutos(b.get("hora") or "") is not None), None)
+        limite = fin or siguiente_inicio or (inicio + 90)
+        if ahora < limite:
+            en_curso = i
+    if en_curso is not None:
+        estados[en_curso] = "ahora"
+    for i, a in enumerate(agenda):
+        inicio = _minutos(a.get("hora") or "")
+        if inicio is not None and inicio > ahora:
+            estados.setdefault(i, "siguiente")
+            break
+    return estados
+
+
+def _bloque_agenda(agenda: list[dict], hora_actual: str | None = None) -> str:
     if not agenda:
         contenido = ('<p class="silencio" style="margin:0">El programa del día se '
                      'publicará aquí. Vuelve a mirar más adelante.</p>')
     else:
-        contenido = "".join(_item_agenda(a) for a in agenda)
+        estados = _estados_agenda(agenda, hora_actual)
+        contenido = "".join(_item_agenda(a, estado=estados.get(i, ""))
+                            for i, a in enumerate(agenda))
     return f'<div class="tarjeta"><h2>🗓️ Programa del día</h2>{contenido}</div>'
 
 
@@ -552,22 +863,44 @@ def _bloque_lugares(lugares: list[dict]) -> str:
         notas = (f'<div class="silencio">{e(lugar_["notas"])}</div>'
                  if lugar_.get("notas") else "")
         tarjetas += f"""
-<div style="padding:10px 0;border-bottom:1px dashed var(--borde)">
-  <strong>📍 {e(lugar_['nombre'])}</strong>
+<div class="agenda-item" style="display:block">
+  <strong style="font-size:16px">📍 {e(lugar_['nombre'])}</strong>
   {direccion}{notas}
-  <div style="margin-top:6px">{boton}</div>
+  <div style="margin-top:8px">{boton}</div>
 </div>"""
     return f'<div class="tarjeta"><h2>📍 Lugares</h2>{tarjetas}</div>'
 
 
 GUION_PARTICIPANTE = """
-function abrirPestana(nombre, btn){
-  document.querySelectorAll('.panel-pestana').forEach(function(x){ x.classList.remove('activa'); });
-  document.querySelectorAll('.pestanas button').forEach(function(b){ b.classList.remove('activa'); });
+// --- Pestañas: el nombre va en la dirección (#programa), así que al volver de
+// un formulario o al recargar se sigue viendo la misma pestaña.
+function mostrarPestana(nombre){
   var panel = document.getElementById('panel-' + nombre);
-  if (panel) panel.classList.add('activa');
-  btn.classList.add('activa');
+  if (!panel) return false;
+  document.querySelectorAll('.panel-pestana').forEach(function(x){
+    x.classList.remove('activa'); });
+  document.querySelectorAll('.pestanas button').forEach(function(b){
+    var suya = b.getAttribute('data-p') === nombre;
+    b.classList.toggle('activa', suya);
+    b.setAttribute('aria-selected', suya ? 'true' : 'false');
+  });
+  panel.classList.add('activa');
+  return true;
 }
+function abrirPestana(nombre, btn){
+  if (mostrarPestana(nombre)){
+    try { history.replaceState(null, '', '#' + nombre); } catch (e) {}
+  }
+}
+(function(){
+  var inicial = (location.hash || '').replace('#', '');
+  if (inicial) mostrarPestana(inicial);
+  window.addEventListener('hashchange', function(){
+    mostrarPestana((location.hash || '').replace('#', ''));
+  });
+})();
+
+// --- El equipo se completa en directo según pasan por el sorteo
 (function(){
   var cont = document.getElementById('chips-equipo');
   if (!cont || !window.fetch || !window.RUTA_EQUIPO) return;
@@ -576,7 +909,16 @@ function abrirPestana(nombre, btn){
     d.dentro.forEach(function(m){
       var s = document.createElement('span');
       s.className = 'chip' + (m.yo ? ' yo' : '');
-      s.textContent = (m.cap ? '\\ud83d\\udc51 ' : '') + m.n + (m.yo ? ' (t\\u00fa)' : '');
+      if (m.ini){
+        var av = document.createElement('span');
+        av.className = 'inicial';
+        av.style.background = d.color; av.style.color = d.tinta;
+        av.setAttribute('aria-hidden', 'true');
+        av.textContent = m.ini;
+        s.appendChild(av);
+      }
+      s.appendChild(document.createTextNode(
+        (m.cap ? '\\ud83d\\udc51 ' : '') + m.n + (m.yo ? ' (t\\u00fa)' : '')));
       cont.appendChild(s);
     });
     for (var i = 0; i < d.pendientes; i++){
@@ -587,12 +929,19 @@ function abrirPestana(nombre, btn){
     }
     var c = document.getElementById('contador-equipo');
     if (c) c.textContent = d.texto;
+    var barra = document.querySelector('#panel-equipo .barra > span');
+    if (barra){
+      var total = d.dentro.length + d.pendientes;
+      barra.style.width = (total ? Math.round(d.dentro.length / total * 100) : 0) + '%';
+    }
   }
   setInterval(function(){
     fetch(RUTA_EQUIPO).then(function(r){ return r.json(); }).then(pinta)
       .catch(function(){});
   }, 6000);
 })();
+
+// --- La clasificación también se refresca sola
 (function(){
   var zona = document.getElementById('zona-puntos');
   if (!zona || !window.fetch || !window.RUTA_PUNTOS) return;
@@ -605,15 +954,33 @@ function abrirPestana(nombre, btn){
 """
 
 
+def _tarjeta_cita(icono: str, titulo: str, hora: str, cuerpo: str) -> str:
+    """Tarjeta de «tu cita»: la sala de la escape o la tanda de karts."""
+    return f"""
+<div class="tarjeta">
+  <h2>{icono} {e(titulo)}</h2>
+  <div class="agenda-item" style="padding-top:0">
+    <div class="agenda-hora">{e(hora)}</div>
+    <div class="agenda-texto">{cuerpo}</div>
+  </div>
+</div>"""
+
+
 def render_participante(cfg: dict, p: dict, equipo: dict | None,
                         companeros: list[dict], agenda: list[dict],
                         lugares: list[dict], referencia: date,
                         lugar_escape: dict | None = None,
                         lugar_karts: dict | None = None,
                         clasif: dict | None = None,
+                        hora_actual: str | None = None,
                         avisos=None) -> str:
     contador = cuenta_atras(cfg.get("fecha", ""), referencia)
     chip = f'<span class="fecha-chip">{e(contador)}</span>' if contador else ""
+    color_equipo = (equipo.get("color") or "#CC0C18") if equipo else None
+    if equipo:
+        chip += (f'<span class="fecha-chip" style="background:{e(color_equipo)}1A;'
+                 f'color:{e(color_equipo)}">{e(equipo.get("emoji"))} '
+                 f'Equipo {e(equipo["nombre"])}</span>')
     contacto = (f'<div class="pie">¿Dudas? Contacta con {e(cfg.get("contacto"))}</div>'
                 if cfg.get("contacto") else "")
     nombre_pila = nombre_corto(p)
@@ -622,23 +989,31 @@ def render_participante(cfg: dict, p: dict, equipo: dict | None,
         'publicarán aquí.</p></div>')
     ruta_equipo = f"/p/{p['token']}/equipo.json" if equipo else ""
     ruta_puntos = f"/p/{p['token']}/puntos.html" if clasif else ""
+    # El texto de bienvenida es de acogida: cuando ya ha respondido, la página
+    # pasa a ser la guía del día y ese párrafo solo estorba.
+    bienvenida = (f'<p class="silencio">{e(cfg.get("descripcion"))}</p>'
+                  if p["confirmado"] == 0 and cfg.get("descripcion") else "")
 
     # Pestaña de puntos: si es capitán, el formulario de la hora de salida
     tarjeta_capitan = ""
     if equipo and equipo.get("capitan_id") == p["id"]:
         tarjeta_capitan = f"""
-<div class="tarjeta" style="border-color:var(--rojo)">
+<div class="tarjeta destacada">
   <h2>👑 Eres el capitán de tu equipo</h2>
-  <p class="silencio">Cuando salgáis de vuestra sala de la escape room, apunta
-  aquí la hora de salida: con ella se calculan los puntos del equipo.</p>
+  <p class="silencio" style="margin-top:0">Cuando salgáis de vuestra sala de la
+  escape room, apunta aquí la hora de salida: con ella se calculan los puntos
+  del equipo.</p>
   <form class="linea" method="post" action="/p/{e(p['token'])}/tiempo_escape">
-    <div><label>Hora de salida</label>
-      <input name="tiempo" value="{e(equipo.get('tiempo_escape'))}"
-             placeholder="10:05" size="8"></div>
+    <div style="flex:1;min-width:120px">
+      <label for="hora-salida">Hora de salida</label>
+      <input id="hora-salida" name="tiempo" value="{e(equipo.get('tiempo_escape'))}"
+             placeholder="10:05" inputmode="numeric" autocomplete="off"></div>
     <button class="boton" type="submit">Guardar</button>
   </form>
 </div>"""
-    panel_puntos = (f'{tarjeta_capitan}<div class="tarjeta"><h2>🏆 Clasificación</h2>'
+    panel_puntos = (f'{tarjeta_capitan}<div class="tarjeta"><h2>🏆 Clasificación'
+                    f'<span class="en-directo" style="float:right;font-weight:600">'
+                    f'<span class="pulso"></span> en directo</span></h2>'
                     f'<div id="zona-puntos">{fragmento_clasificacion(clasif)}</div>'
                     f'</div>') if clasif else ""
 
@@ -654,23 +1029,16 @@ def render_participante(cfg: dict, p: dict, equipo: dict | None,
                             if url else f'<div class="agenda-lugar">📍 {sitio}</div>')
         descripcion_sala = (f'<div class="silencio">{e(equipo.get("sala_desc"))}</div>'
                             if equipo.get("sala_desc") else "")
-        aviso_sala = f"""
-<div class="tarjeta" style="border-color:var(--rojo)">
-  <h2>🗝️ {e(cfg.get('escape_titulo') or 'Escape room')}</h2>
-  <div class="agenda-item">
-    <div class="agenda-hora">{e(cfg.get('escape_hora'))}</div>
-    <div class="agenda-texto"><strong>Vuestra sala: {e(equipo['sala'])}</strong>
-    {descripcion_sala}{enlace_sitio}
-    <div class="silencio">Hay que estar allí a las {e(cfg.get('escape_hora'))}.</div>
-    </div>
-  </div>
-</div>"""
+        aviso_sala = _tarjeta_cita(
+            "🗝️", cfg.get("escape_titulo") or "Escape room", cfg.get("escape_hora") or "",
+            f'<strong>Vuestra sala: {e(equipo["sala"])}</strong>{descripcion_sala}'
+            f'{enlace_sitio}<div class="silencio">Hay que estar allí a las '
+            f'{e(cfg.get("escape_hora"))}.</div>')
 
     # Su tanda de karts, si está sorteada
     aviso_tanda = ""
     tanda = (p.get("tanda") or "").strip()
     if tanda in ORDINAL_TANDA:
-        hora_tanda = cfg.get(f"karts_hora{tanda}") or ""
         extra = ('<div class="silencio">A la 3ª tanda, la final, también irán los '
                  '2 mejores tiempos de las tandas anteriores.</div>'
                  if tanda == "3" else "")
@@ -682,40 +1050,45 @@ def render_participante(cfg: dict, p: dict, equipo: dict | None,
                            f'target="_blank" rel="noopener">{nombre_sitio}</a></div>'
                            if url else
                            f'<div class="agenda-lugar">📍 {nombre_sitio}</div>')
-        aviso_tanda = f"""
-<div class="tarjeta" style="border-color:var(--rojo)">
-  <h2>🏎️ {e(cfg.get('karts_nombre') or 'Karts')}</h2>
-  <div class="agenda-item">
-    <div class="agenda-hora">{e(hora_tanda)}</div>
-    <div class="agenda-texto"><strong>Te toca en la {ORDINAL_TANDA[tanda]} tanda</strong>
-    {extra}{sitio_karts}</div>
-  </div>
-</div>"""
+        aviso_tanda = _tarjeta_cita(
+            "🏎️", cfg.get("karts_nombre") or "Karts",
+            cfg.get(f"karts_hora{tanda}") or "",
+            f'<strong>Te toca en la {ORDINAL_TANDA[tanda]} tanda</strong>'
+            f'{extra}{sitio_karts}')
+
+    pestanas = ""
+    for clave, etiqueta in [("equipo", "🎽 Equipo"), ("programa", "🗓️ Programa"),
+                            ("puntos", "🏆 Puntos"), ("lugares", "📍 Lugares")]:
+        activa = " activa" if clave == "equipo" else ""
+        pestanas += (f'<button type="button" role="tab" data-p="{clave}"'
+                     f' aria-controls="panel-{clave}"'
+                     f' aria-selected="{"true" if activa else "false"}"'
+                     f' class="{activa.strip()}"'
+                     f' onclick="abrirPestana(\'{clave}\', this)">{etiqueta}</button>')
+
     cuerpo = f"""
-<h1>¡Hola, {e(nombre_pila)}! 👋</h1>
-<div class="silencio"><strong>{e(cfg.get('nombre'))}</strong><br>
-📅 {e(fecha_bonita(cfg.get('fecha', '')))} · 🕘 {e(cfg.get('hora'))} h</div>
-{chip}
-<p class="silencio">{e(cfg.get('descripcion'))}</p>
+<div class="etiqueta" style="margin-top:var(--e4)">{e(cfg.get('nombre'))}</div>
+<h1 style="margin-top:0">¡Hola, {e(nombre_pila)}! 👋</h1>
+<div class="meta">
+  <span>📅 {e(fecha_bonita(cfg.get('fecha', '')))}</span>
+  <span>🕘 {e(cfg.get('hora'))} h</span>
+</div>
+<div class="acciones" style="gap:6px">{chip}</div>
+{bienvenida}
 {_bloque_asistencia(p, cfg)}
-<nav class="pestanas">
-  <button type="button" class="activa" onclick="abrirPestana('equipo', this)">🎽 Equipo</button>
-  <button type="button" onclick="abrirPestana('programa', this)">🗓️ Programa</button>
-  <button type="button" onclick="abrirPestana('puntos', this)">🏆 Puntos</button>
-  <button type="button" onclick="abrirPestana('lugares', this)">📍 Lugares</button>
-</nav>
-<div class="panel-pestana activa" id="panel-equipo">
+<nav class="pestanas" role="tablist" aria-label="Secciones">{pestanas}</nav>
+<div class="panel-pestana activa" id="panel-equipo" role="tabpanel">
   {_bloque_equipo(p, equipo, companeros)}
 </div>
-<div class="panel-pestana" id="panel-programa">
+<div class="panel-pestana" id="panel-programa" role="tabpanel">
   {aviso_sala}
   {aviso_tanda}
-  {_bloque_agenda(agenda)}
+  {_bloque_agenda(agenda, hora_actual)}
 </div>
-<div class="panel-pestana" id="panel-puntos">
+<div class="panel-pestana" id="panel-puntos" role="tabpanel">
   {panel_puntos}
 </div>
-<div class="panel-pestana" id="panel-lugares">
+<div class="panel-pestana" id="panel-lugares" role="tabpanel">
   {panel_lugares}
 </div>
 {contacto}
@@ -726,7 +1099,8 @@ var RUTA_PUNTOS = {json.dumps(ruta_puntos)};
 {GUION_PARTICIPANTE}
 </script>
 """
-    return base(cfg.get("nombre", "Evento"), cuerpo, avisos=avisos)
+    return base(cfg.get("nombre", "Evento"), cuerpo, avisos=avisos,
+                acento=color_equipo)
 
 
 # ================================================================== admin
@@ -748,19 +1122,38 @@ def fragmento_clasificacion(clasif: dict) -> str:
     tabla = clasif["equipos"]
     hay_puntos = any(fila["total"] for fila in tabla)
     medallas = ["🥇", "🥈", "🥉"]
+    tope = max([fila["total"] for fila in tabla] or [0]) or 1
+
+    # Podio: una barra por equipo con su color y el total bien grande
+    podio = ""
+    for i, fila in enumerate(tabla):
+        eq = fila["equipo"]
+        color = e(eq.get("color") or "#CC0C18")
+        puesto = medallas[i] if i < len(medallas) and hay_puntos else f"{i + 1}º"
+        ancho = round(fila["total"] / tope * 100) if hay_puntos else 0
+        podio += f"""
+<div class="podio-fila">
+  <div class="podio-puesto">{puesto}</div>
+  <div class="podio-cuerpo">
+    <div class="podio-nombre"><span>{e(eq.get('emoji'))} {e(eq['nombre'])}</span>
+      <span class="podio-total">{fila['total']} pt</span></div>
+    <div class="podio-barra"><span style="width:{ancho}%;background:{color}"></span></div>
+  </div>
+</div>"""
+    podio = f'<div class="podio">{podio}</div>' if tabla else \
+        '<p class="silencio">Aún no hay equipos.</p>'
+
+    # Detalle: de dónde salen esos puntos
     filas = ""
     for i, fila in enumerate(tabla):
         eq = fila["equipo"]
-        puesto = medallas[i] if i < len(medallas) and hay_puntos else f"{i + 1}º"
-        filas += (f'<tr><td>{puesto}</td>'
-                  f'<td>{_simbolo_equipo(eq.get("color"), eq.get("emoji"))}'
-                  f'<strong>{e(eq["nombre"])}</strong></td>'
+        filas += (f'<tr><td>{_simbolo_equipo(eq.get("color"), eq.get("emoji"))}'
+                  f'{e(eq["nombre"])}</td>'
                   f'<td>{fila["escape"]}</td><td>{fila["karts"]}</td>'
                   f'<td><strong>{fila["total"]}</strong></td></tr>')
     tabla_html = (f'<div class="envoltorio-tabla"><table class="tabla">'
-                  f'<tr><th></th><th>Equipo</th><th>🗝️ Escape</th><th>🏎️ Karts</th>'
-                  f'<th>Total</th></tr>{filas}</table></div>'
-                  if tabla else '<p class="silencio">Aún no hay equipos.</p>')
+                  f'<tr><th>Equipo</th><th>🗝️ Escape</th><th>🏎️ Karts</th>'
+                  f'<th>Total</th></tr>{filas}</table></div>' if tabla else "")
 
     salidas = ""
     for fila in clasif["escape"]:
@@ -769,8 +1162,9 @@ def fragmento_clasificacion(clasif: dict) -> str:
             salidas += (f'<div>{_simbolo_equipo(eq.get("color"), eq.get("emoji"))}'
                         f'{e(eq["nombre"])} — salió a las {e(fila["tiempo"])}'
                         f' → <strong>{fila["puntos"]} pt</strong></div>')
-    bloque_salidas = (f'<div class="etiqueta" style="margin-top:10px">Salidas de la '
-                      f'escape room</div>{salidas}' if salidas else "")
+    bloque_salidas = (f'<div class="etiqueta" style="margin-top:var(--e4)">Salidas de '
+                      f'la escape room</div><div class="lista-datos">{salidas}</div>'
+                      if salidas else "")
 
     mejores = ""
     for fila in clasif["karts"][:5]:
@@ -779,17 +1173,21 @@ def fragmento_clasificacion(clasif: dict) -> str:
                     f' → <strong>{fila["puntos"]} pt</strong></div>')
     bloque_karts = ""
     if mejores:
-        bloque_karts = (f'<div class="etiqueta" style="margin-top:10px">Mejores vueltas '
-                        f'({clasif["n_corredores"]} pilotos con tiempo)</div>{mejores}')
+        bloque_karts = (f'<div class="etiqueta" style="margin-top:var(--e4)">Mejores '
+                        f'vueltas ({clasif["n_corredores"]} pilotos con tiempo)</div>'
+                        f'<div class="lista-datos">{mejores}</div>')
 
-    aviso = ("" if hay_puntos else
-             '<p class="silencio">La clasificación se irá rellenando durante el día: '
-             'la salida de la escape room y las vueltas de los karts.</p>')
-    return (f'{tabla_html}{aviso}'
-            f'<p class="silencio" style="margin-top:10px">🏅 <strong>Gana el equipo '
-            f'con más puntos: medalla para todos sus miembros.</strong> Karts: el más '
-            f'rápido se lleva tantos puntos como pilotos, el último 1 — todas las '
-            f'posiciones cuentan.</p>'
+    if hay_puntos:
+        detalle = (f'<details><summary>Ver el desglose de los puntos</summary>'
+                   f'{tabla_html}</details>')
+    else:
+        detalle = ('<p class="silencio">La clasificación se irá rellenando durante '
+                   'el día: la salida de la escape room y las vueltas de los karts.</p>')
+    return (f'{podio}{detalle}'
+            f'<p class="silencio" style="margin-top:var(--e3)">🏅 <strong>Gana el '
+            f'equipo con más puntos: medalla para todos sus miembros.</strong> '
+            f'Karts: el más rápido se lleva tantos puntos como pilotos, el último 1 '
+            f'— todas las posiciones cuentan.</p>'
             f'{bloque_salidas}{bloque_karts}')
 
 
@@ -802,11 +1200,13 @@ def render_puntos(cfg: dict, clasif: dict, equipos: list[dict],
         nota_capitan = (f'<span class="silencio">capitán: 👑 {e(capitan)}</span>'
                         if capitan else '<span class="silencio">sin capitán aún</span>')
         filas_escape += f"""
-<div class="acciones" style="margin:6px 0">
-  <span style="min-width:130px">{_simbolo_equipo(eq.get('color'), eq.get('emoji'))}
-  <strong>{e(eq['nombre'])}</strong></span>
-  <input name="tiempo_{eq['id']}" value="{e(eq.get('tiempo_escape'))}"
-         placeholder="10:05" size="9">
+<div class="acciones" style="margin:8px 0;flex-wrap:nowrap">
+  <label for="te{eq['id']}" style="margin:0;min-width:120px;color:var(--tinta);
+         font-size:15px">{_simbolo_equipo(eq.get('color'), eq.get('emoji'))}
+  {e(eq['nombre'])}</label>
+  <input id="te{eq['id']}" name="tiempo_{eq['id']}" value="{e(eq.get('tiempo_escape'))}"
+         placeholder="10:05" size="7" inputmode="numeric"
+         style="width:96px;flex:none;font-variant-numeric:tabular-nums">
   {nota_capitan}
 </div>"""
 
@@ -817,27 +1217,35 @@ def render_puntos(cfg: dict, clasif: dict, equipos: list[dict],
         if not grupo:
             continue
         titulo = (f'{_simbolo_equipo(eq.get("color"), eq.get("emoji"))}'
-                  f'<strong>{e(eq["nombre"])}</strong>' if eq
-                  else '<strong>Sin equipo</strong>')
-        filas_karts += f'<div class="etiqueta" style="margin-top:10px">{titulo}</div>'
+                  f'{e(eq["nombre"])}' if eq else "Sin equipo")
+        columna = ""
         for p in grupo:
-            filas_karts += (f'<div class="acciones" style="margin:4px 0">'
-                            f'<span style="min-width:130px">{e(nombre_corto(p))}'
-                            f'{" (t" + e(p["tanda"]) + ")" if (p.get("tanda") or "").strip() else ""}</span>'
-                            f'<input name="tiempo_{p["id"]}" '
-                            f'value="{e(p.get("tiempo_karts"))}" '
-                            f'placeholder="48.123" size="9"></div>')
+            tanda = (p.get("tanda") or "").strip()
+            columna += (f'<div class="fila-tiempo">'
+                        f'<label for="t{p["id"]}">{e(nombre_corto(p))}'
+                        f'{f" · {ORDINAL_TANDA[tanda]}" if tanda in ORDINAL_TANDA else ""}'
+                        f'</label>'
+                        f'<input id="t{p["id"]}" name="tiempo_{p["id"]}" '
+                        f'value="{e(p.get("tiempo_karts"))}" inputmode="decimal" '
+                        f'placeholder="48.123" size="8"></div>')
+        filas_karts += (f'<div><div class="etiqueta">{titulo}</div>{columna}</div>')
 
     cuerpo = f"""
 <div class="tarjeta">
+  <h2>🏆 Clasificación</h2>
+  {fragmento_clasificacion(clasif)}
+</div>
+
+<div class="tarjeta">
   <h2>🗝️ Escape room — hora de salida de cada sala</h2>
-  <p class="silencio">La mete el capitán desde su móvil (pestaña 🏆 Puntos de su
-  enlace), o tú aquí. Antes = mejor. Puntos por orden de salida:</p>
+  <p class="silencio" style="margin-top:0">La mete el capitán desde su móvil
+  (pestaña 🏆 Puntos de su enlace), o tú aquí. Antes = mejor.</p>
   <form method="post" action="/admin/puntos/escape">
     {filas_escape}
-    <div class="acciones" style="margin-top:8px">
-      <label style="margin:0">Puntos (1º, 2º, 3º…):</label>
-      <input name="puntos_escape" value="{e(cfg.get('puntos_escape'))}" size="10">
+    <div class="acciones" style="margin-top:var(--e3)">
+      <label for="puntos-escape" style="margin:0">Puntos (1º, 2º, 3º…):</label>
+      <input id="puntos-escape" name="puntos_escape"
+             value="{e(cfg.get('puntos_escape'))}" size="10">
       <button class="boton mini" type="submit">Guardar</button>
     </div>
   </form>
@@ -845,18 +1253,15 @@ def render_puntos(cfg: dict, clasif: dict, equipos: list[dict],
 
 <div class="tarjeta">
   <h2>🏎️ Karts — mejor vuelta de cada piloto</h2>
-  <p class="silencio">Formatos válidos: <code>48.123</code>, <code>48,3</code> o
-  <code>1:02.451</code>. Para los 2 finalistas cuenta su mejor tiempo de las dos
-  tandas. El más rápido se lleva tantos puntos como pilotos con tiempo; el último, 1.</p>
+  <p class="silencio" style="margin-top:0">Formatos válidos: <code>48.123</code>,
+  <code>48,3</code> o <code>1:02.451</code>. Para los 2 finalistas cuenta su mejor
+  tiempo de las dos tandas. El más rápido se lleva tantos puntos como pilotos con
+  tiempo; el último, 1.</p>
   <form method="post" action="/admin/puntos/karts">
-    {filas_karts}
-    <div style="margin-top:10px"><button class="boton" type="submit">Guardar todos</button></div>
+    <div class="rejilla-tiempos">{filas_karts}</div>
+    <div style="margin-top:var(--e4)">
+      <button class="boton" type="submit">Guardar todos</button></div>
   </form>
-</div>
-
-<div class="tarjeta">
-  <h2>🏆 Clasificación</h2>
-  {fragmento_clasificacion(clasif)}
 </div>
 """
     return pagina_admin("Puntos", "/admin/puntos", cuerpo, avisos=avisos,
@@ -867,10 +1272,11 @@ def _nav(ruta_actual: str, con_salir: bool) -> str:
     enlaces = ""
     for url, texto in NAV_ADMIN:
         activo = " activo" if ruta_actual == url else ""
-        enlaces += f'<a class="{activo.strip()}" href="{url}">{texto}</a>'
+        aria = ' aria-current="page"' if activo else ""
+        enlaces += f'<a class="{activo.strip()}" href="{url}"{aria}>{texto}</a>'
     if con_salir:
-        enlaces += '<a href="/admin/salir" style="margin-left:auto">Salir</a>'
-    return f'<nav class="navadmin">{enlaces}</nav>'
+        enlaces += '<a class="salir" href="/admin/salir">Salir</a>'
+    return f'<nav class="navadmin" aria-label="Secciones del panel">{enlaces}</nav>'
 
 
 def pagina_admin(titulo: str, ruta: str, cuerpo: str, *, avisos=None,
@@ -880,51 +1286,120 @@ def pagina_admin(titulo: str, ruta: str, cuerpo: str, *, avisos=None,
         aviso_pw = ('<div class="aviso">⚠️ El panel está <strong>sin contraseña</strong>. '
                     'Antes de publicar la app en internet define la variable '
                     '<code>EVENTO_ADMIN_PASSWORD</code> (ver README).</div>')
-    contenido = f"{_nav(ruta, con_salir)}{aviso_pw}<h1>{e(titulo)}</h1>{cuerpo}"
+    contenido = (f"{_nav(ruta, con_salir)}{aviso_pw}"
+                 f'<h1 style="margin-top:var(--e2)">{e(titulo)}</h1>{cuerpo}')
     return base(f"{titulo} — NeaEvento", contenido, admin=True, avisos=avisos)
 
 
 def render_entrar(avisos=None) -> str:
     cuerpo = """
-<div class="tarjeta" style="max-width:420px">
-  <h2>Panel de organización</h2>
-  <form method="post">
-    <label for="password">Contraseña</label>
-    <input id="password" name="password" type="password" autofocus required>
-    <div style="margin-top:12px">
-      <button class="boton bloque" type="submit">Entrar</button>
-    </div>
-  </form>
+<div style="max-width:400px;margin:var(--e6) auto 0">
+  <h1 style="text-align:center">🔒 Organización</h1>
+  <div class="tarjeta">
+    <form method="post">
+      <label for="password">Contraseña del panel</label>
+      <input id="password" name="password" type="password" autofocus required
+             autocomplete="current-password" style="width:100%">
+      <div style="margin-top:var(--e4)">
+        <button class="boton bloque" type="submit">Entrar</button>
+      </div>
+    </form>
+  </div>
+  <div class="pie">Nea Master · NeaEvento</div>
 </div>
 """
-    return base("Entrar — NeaEvento", f"<h1>Organización</h1>{cuerpo}", admin=True,
-                avisos=avisos)
+    return base("Entrar — NeaEvento", cuerpo, admin=True, avisos=avisos)
+
+
+def _kpi(valor, texto: str, de: int = 0) -> str:
+    """Un número grande con su etiqueta y, si tiene sentido, su barra de avance."""
+    barra = ""
+    if de:
+        barra = (f'<div class="barra"><span style="width:'
+                 f'{min(100, round(valor / de * 100))}%"></span></div>')
+    return (f'<div class="kpi"><div class="valor">{valor}'
+            f'{f"<span style=font-size:15px;color:var(--gris)> / {de}</span>" if de else ""}'
+            f'</div><div class="texto">{texto}</div>{barra}</div>')
+
+
+def _preparativos(cfg: dict, datos: dict, sin_password: bool) -> str:
+    """Lista de «qué está listo y qué falta» para el día del evento."""
+    n = datos["participantes"]
+    eq = datos["equipos"]
+    pasos = [
+        (n > 0, f"{n} participantes cargados" if n else
+         "Cargar la lista de participantes", "/admin/participantes", "Participantes"),
+        (eq > 0, f"{eq} equipos creados" if eq else "Crear los equipos",
+         "/admin/equipos", "Equipos"),
+        (eq > 0 and n > 0 and datos["sin_equipo"] == 0,
+         "Sorteo de equipos hecho" if eq and datos["sin_equipo"] == 0 else
+         f"Sortear los equipos ({datos['sin_equipo']} sin equipo)",
+         "/admin/equipos", "Sortear"),
+        (eq > 0 and datos["con_capitan"] >= eq,
+         "Capitanes sorteados" if eq and datos["con_capitan"] >= eq else
+         "Sortear los capitanes", "/admin/equipos", "Capitanes"),
+        (eq > 0 and datos["con_sala"] >= eq,
+         "Salas de la escape repartidas" if eq and datos["con_sala"] >= eq else
+         "Sortear las salas de la escape room", "/admin/agenda", "Salas"),
+        (datos["con_tanda"] > 0,
+         "Tandas de karts sorteadas" if datos["con_tanda"] else
+         "Sortear las tandas de karts", "/admin/agenda", "Tandas"),
+        (datos["actividades"] > 0 and datos["lugares"] > 0,
+         f"Agenda ({datos['actividades']}) y lugares ({datos['lugares']}) puestos",
+         "/admin/agenda", "Agenda"),
+        (bool((cfg.get("url_base") or "").strip()),
+         "URL pública fijada (los enlaces se generan con ella)" if
+         (cfg.get("url_base") or "").strip() else
+         "Fijar la URL pública antes de repartir enlaces", "/admin/evento", "Evento"),
+        (not sin_password, "Panel protegido con contraseña" if not sin_password else
+         "Poner contraseña al panel (EVENTO_ADMIN_PASSWORD)", "", ""),
+        (n > 0 and datos["han_abierto"] >= n,
+         f"Enlaces abiertos por {datos['han_abierto']} de {n}" if n else
+         "Repartir los enlaces personales", "/admin/enlaces", "Enlaces"),
+    ]
+    filas = ""
+    for hecho, texto, url, accion in pasos:
+        icono = "✅" if hecho else "⬜"
+        enlace = (f' <a href="{url}" style="white-space:nowrap">{e(accion)} →</a>'
+                  if url and not hecho else "")
+        filas += (f'<div class="paso{" hecho" if hecho else ""}">'
+                  f'<span class="paso-icono" aria-hidden="true">{icono}</span>'
+                  f'<span>{e(texto)}{enlace}</span></div>')
+    listos = sum(1 for hecho, *_ in pasos if hecho)
+    return f"""
+<div class="tarjeta">
+  <h2>Preparativos <span class="silencio" style="font-weight:600">
+  · {listos} de {len(pasos)} listos</span></h2>
+  <div class="barra" style="margin-bottom:var(--e3)"><span
+       style="width:{round(listos / len(pasos) * 100)}%"></span></div>
+  <div class="preparativos">{filas}</div>
+</div>"""
 
 
 def render_resumen(cfg: dict, datos: dict, equipos: list[dict],
                    referencia: date, avisos=None, sin_password=False) -> str:
     contador = cuenta_atras(cfg.get("fecha", ""), referencia)
     chip = f'<span class="fecha-chip">{e(contador)}</span>' if contador else ""
+    n = datos["participantes"]
 
-    kpis = ""
-    for valor, texto in [
-        (datos["participantes"], "participantes"),
-        (datos["confirmados"], "✅ confirmados"),
-        (datos["no_vienen"], "❌ no vienen"),
-        (datos["pendientes"], "⏳ sin responder"),
-        (datos["han_abierto"], "👁 abrieron su enlace"),
-        (datos["sin_equipo"], "🎲 sin equipo"),
-    ]:
-        kpis += f'<div class="kpi"><div class="valor">{valor}</div><div class="texto">{texto}</div></div>'
+    kpis = (_kpi(n, "participantes")
+            + _kpi(datos["confirmados"], "✅ confirmados", de=n)
+            + _kpi(datos["han_abierto"], "👁 abrieron su enlace", de=n)
+            + _kpi(datos["pendientes"], "⏳ sin responder")
+            + _kpi(datos["no_vienen"], "❌ no vienen")
+            + _kpi(datos["sin_equipo"], "🎲 sin equipo"))
 
     filas_equipos = ""
     for eq in equipos:
-        filas_equipos += (f'<tr><td>{_simbolo_equipo(eq.get("color"), eq.get("emoji"))}'
+        filas_equipos += (f'<tr><td class="nowrap">'
+                          f'{_simbolo_equipo(eq.get("color"), eq.get("emoji"))}'
                           f'{e(eq["nombre"])}</td>'
-                          f'<td>{eq["n_miembros"]}</td><td>{eq["n_confirmados"]}</td></tr>')
+                          f'<td>{eq["n_miembros"]}</td><td>{eq["n_confirmados"]}</td>'
+                          f'<td>{e(eq.get("sala")) or "—"}</td></tr>')
     tabla_equipos = (f'<div class="tarjeta"><h2>Equipos</h2><div class="envoltorio-tabla">'
                      f'<table class="tabla"><tr><th>Equipo</th><th>Miembros</th>'
-                     f'<th>Confirmados</th></tr>{filas_equipos}</table></div></div>'
+                     f'<th>Confirmados</th><th>Sala</th></tr>{filas_equipos}</table>'
+                     f'</div></div>'
                      if filas_equipos else
                      '<div class="tarjeta"><h2>Equipos</h2><p class="silencio">Aún no hay '
                      'equipos. Créalos en la pestaña <a href="/admin/equipos">Equipos</a>.'
@@ -932,29 +1407,22 @@ def render_resumen(cfg: dict, datos: dict, equipos: list[dict],
 
     sin_abrir = datos.get("sin_abrir") or []
     if sin_abrir:
-        nombres = ", ".join(e(n) for n in sin_abrir)
+        nombres = ", ".join(e(x) for x in sin_abrir)
         bloque_sin_abrir = (f'<div class="tarjeta"><h2>Aún no han abierto su enlace '
                             f'({len(sin_abrir)})</h2><p class="silencio">{nombres}</p>'
-                            f'<p class="silencio">Reenvíales el enlace desde la pestaña '
-                            f'<a href="/admin/enlaces">Enlaces</a>.</p></div>')
+                            f'<p class="silencio" style="margin-bottom:0">Reenvíales el '
+                            f'enlace desde la pestaña <a href="/admin/enlaces">Enlaces'
+                            f'</a>.</p></div>')
     else:
         bloque_sin_abrir = ""
 
-    pasos = ""
-    if datos["participantes"] == 0:
-        pasos = ('<div class="aviso">Primeros pasos: ① revisa los datos en '
-                 '<a href="/admin/evento">Evento</a> · ② añade la gente en '
-                 '<a href="/admin/participantes">Participantes</a> · ③ crea los '
-                 '<a href="/admin/equipos">Equipos</a> y sortea · ④ monta la '
-                 '<a href="/admin/agenda">Agenda</a> y los <a href="/admin/lugares">'
-                 'Lugares</a> · ⑤ reparte los <a href="/admin/enlaces">Enlaces</a>.</div>')
-
     cuerpo = f"""
-<div class="silencio"><strong>{e(cfg.get('nombre'))}</strong> ·
-📅 {e(fecha_bonita(cfg.get('fecha', '')))} · 🕘 {e(cfg.get('hora'))} h</div>
+<div class="meta"><span><strong>{e(cfg.get('nombre'))}</strong></span>
+  <span>📅 {e(fecha_bonita(cfg.get('fecha', '')))}</span>
+  <span>🕘 {e(cfg.get('hora'))} h</span></div>
 {chip}
-{pasos}
 <div class="kpis">{kpis}</div>
+{_preparativos(cfg, datos, sin_password)}
 {tabla_equipos}
 {bloque_sin_abrir}
 """
@@ -1018,16 +1486,16 @@ def render_participantes(lista: list[dict], equipos: list[dict],
         filas += f"""
 <tr>
   <td><strong>{e(p['nombre'])}</strong>{detalle_html}</td>
-  <td>{e(p['telefono']) or '<span class="silencio">—</span>'}</td>
-  <td>{equipo_html}</td>
+  <td class="solo-ancho">{e(p['telefono']) or '<span class="silencio">—</span>'}</td>
+  <td class="nowrap">{equipo_html}</td>
   <td>{_insignia_estado(p)}</td>
   <td class="acciones">
     <a class="boton secundario mini" href="/admin/participantes/{p['id']}">Editar</a>
   </td>
 </tr>"""
     tabla = (f'<div class="envoltorio-tabla"><table class="tabla">'
-             f'<tr><th>Nombre</th><th>Teléfono</th><th>Equipo</th><th>Estado</th>'
-             f'<th></th></tr>{filas}</table></div>'
+             f'<tr><th>Nombre</th><th class="solo-ancho">Teléfono</th><th>Equipo</th>'
+             f'<th>Estado</th><th></th></tr>{filas}</table></div>'
              if filas else
              '<p class="silencio">Todavía no hay participantes: añádelos aquí arriba, '
              'pégalos de una lista o importa un Excel/CSV.</p>')
@@ -1189,7 +1657,7 @@ def render_equipos(equipos: list[dict], miembros_por_equipo: dict[int, list[dict
         capitan = next((nombre_corto(m) for m in miembros_por_equipo.get(eq["id"], [])
                         if m["id"] == eq.get("capitan_id")), None)
         filas += f"""
-<div class="tarjeta">
+<div class="tarjeta" style="border-left:5px solid {e(eq.get('color') or '#CC0C18')}">
   <form class="linea" method="post" action="/admin/equipos/{eq['id']}/guardar">
     <div><label>Nombre</label><input name="nombre" value="{e(eq['nombre'])}" required></div>
     <div><label>Color</label><input name="color" type="color" value="{e(eq.get('color') or '#CC0C18')}" style="height:40px;width:64px;padding:2px"></div>
@@ -1446,12 +1914,12 @@ def render_agenda(items: list[dict], lugares: list[dict], equipos: list[dict],
   equipo (p. ej. cada equipo a su sala de la escape room: crea una actividad por
   sala y asígnale su equipo — cada participante ve solo la suya).</p>
 </div>
-{_tarjeta_salas(cfg, equipos, lugares, salas)}
-{_tarjeta_tandas(cfg, participantes, lugares)}
 <div class="tarjeta">
   <h2>Programa del día ({len(items)})</h2>
   {tabla}
 </div>
+{_tarjeta_salas(cfg, equipos, lugares, salas)}
+{_tarjeta_tandas(cfg, participantes, lugares)}
 """
     return pagina_admin("Agenda", "/admin/agenda", cuerpo, avisos=avisos,
                         sin_password=sin_password)
@@ -1549,11 +2017,20 @@ def render_enlaces(filas_datos: list[dict], url_base: str, url_definida: bool,
                   f'rel="noopener">WhatsApp</a>')
         else:
             wa = '<span class="silencio" title="Sin teléfono">—</span>'
+        if f["confirmado"] == 1:
+            estado = '<span class="insignia ok">✅ viene</span>'
+        elif f["confirmado"] == -1:
+            estado = '<span class="insignia no">❌ no viene</span>'
+        elif f["visto_en"]:
+            estado = '<span class="insignia pte">👁 lo abrió</span>'
+        else:
+            estado = '<span class="insignia pte">sin abrir</span>'
         filas += f"""
 <tr>
   <td><strong>{e(f['nombre'])}</strong></td>
   <td style="word-break:break-all"><a href="{e(f['enlace'])}" target="_blank"
       rel="noopener">{e(f['enlace'])}</a></td>
+  <td class="nowrap">{estado}</td>
   <td class="acciones">
     <button class="boton secundario mini" type="button" data-c="{e(f['enlace'])}"
             onclick="copiar(this)">Copiar</button>
@@ -1561,8 +2038,8 @@ def render_enlaces(filas_datos: list[dict], url_base: str, url_definida: bool,
   </td>
 </tr>"""
     tabla = (f'<div class="envoltorio-tabla"><table class="tabla">'
-             f'<tr><th>Participante</th><th>Enlace personal</th><th></th></tr>'
-             f'{filas}</table></div>'
+             f'<tr><th>Participante</th><th>Enlace personal</th><th>Estado</th>'
+             f'<th></th></tr>{filas}</table></div>'
              if filas else
              '<p class="silencio">Añade participantes primero: cada uno tendrá aquí su '
              'enlace personal.</p>')

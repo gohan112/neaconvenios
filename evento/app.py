@@ -69,6 +69,13 @@ def _entero_o_none(valor) -> int | None:
         return None
 
 
+def _hora_si_es_hoy(cfg: dict) -> str | None:
+    """La hora actual «HH:MM» solo si el evento es HOY (para marcar «AHORA»)."""
+    if (cfg.get("fecha") or "").strip() != db.hoy().isoformat():
+        return None
+    return db.ahora().split(" ")[-1]
+
+
 def _url_base() -> tuple[str, bool]:
     """(url_base, definida). Si no está configurada, usa la del navegador."""
     configurada = (db.leer_config().get("url_base") or "").strip().rstrip("/")
@@ -144,7 +151,8 @@ def ver_participante(token: str):
         cfg=cfg, p=p, equipo=equipo, companeros=companeros,
         agenda=db.agenda_para(p["equipo_id"]), lugares=db.listar_lugares(),
         referencia=db.hoy(), lugar_escape=lugar_escape,
-        lugar_karts=lugar_karts, clasif=db.clasificacion(), avisos=_avisos(),
+        lugar_karts=lugar_karts, clasif=db.clasificacion(),
+        hora_actual=_hora_si_es_hoy(cfg), avisos=_avisos(),
     )
 
 
@@ -156,11 +164,14 @@ def equipo_json(token: str):
         abort(404)
     miembros = db.miembros(p["equipo_id"])
     equipo = db.equipo(p["equipo_id"]) or {}
-    dentro = [{"n": paginas.nombre_corto(m), "yo": m["id"] == p["id"],
+    color = equipo.get("color") or "#CC0C18"
+    dentro = [{"n": paginas.nombre_corto(m), "ini": paginas.iniciales(m),
+               "yo": m["id"] == p["id"],
                "cap": m["id"] == equipo.get("capitan_id")}
               for m in miembros if m.get("revelado_en")]
     pendientes = len(miembros) - len(dentro)
-    return jsonify(dentro=dentro, pendientes=pendientes,
+    return jsonify(dentro=dentro, pendientes=pendientes, color=color,
+                   tinta=paginas.color_texto(color),
                    texto=paginas._texto_contador(len(dentro), pendientes))
 
 
@@ -179,7 +190,7 @@ def capitan_tiempo_escape(token: str):
     else:
         db.poner_tiempo_escape(equipo["id"], texto)
         flash("¡Hora de salida guardada! Ya cuenta en la clasificación.", "ok")
-    return redirect(f"/p/{token}")
+    return redirect(f"/p/{token}#puntos")  # vuelve a la pestaña de puntos
 
 
 @app.get("/p/<token>/puntos.html")

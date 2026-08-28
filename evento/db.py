@@ -946,6 +946,19 @@ def resumen() -> dict:
         "equipos":       contar("SELECT COUNT(*) FROM equipos"),
         "actividades":   contar("SELECT COUNT(*) FROM agenda"),
         "lugares":       contar("SELECT COUNT(*) FROM lugares"),
+        # Para saber de un vistazo qué queda por preparar
+        "con_tanda":     contar("SELECT COUNT(*) FROM participantes "
+                                "WHERE trim(tanda) != ''"),
+        "con_vuelta":    contar("SELECT COUNT(*) FROM participantes "
+                                "WHERE trim(tiempo_karts) != ''"),
+        "con_capitan":   contar("SELECT COUNT(*) FROM equipos "
+                                "WHERE capitan_id IS NOT NULL"),
+        "con_sala":      contar("SELECT COUNT(*) FROM equipos "
+                                "WHERE trim(sala) != ''"),
+        "con_salida":    contar("SELECT COUNT(*) FROM equipos "
+                                "WHERE trim(tiempo_escape) != ''"),
+        "reglas":        contar("SELECT COUNT(DISTINCT trim(grupo_sorteo)) "
+                                "FROM participantes WHERE trim(grupo_sorteo) != ''"),
     }
     datos["sin_abrir"] = [
         r["nombre"] for r in con.execute(
