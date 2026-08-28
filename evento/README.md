@@ -29,6 +29,8 @@ seguridad es copiar ese fichero.
    asignan solos) y pulsa **Sorteo**: reparte de forma aleatoria y equilibrada
    (y si los participantes tienen `rol`, también reparte cada rol a partes
    iguales entre los equipos: mismos comerciales y técnicos en cada uno).
+   Con **🔗 Personas que van juntas** puedes crear reglas (parejas o grupos)
+   que el sorteo respeta siempre: los unidos caen en el mismo equipo.
    Las asignaciones a mano se respetan si repartes «solo a los que no tienen
    equipo». También puedes importar el reparto ya decidido (columna `equipo`
    del Excel/CSV). La primera vez que cada participante abra su enlace después

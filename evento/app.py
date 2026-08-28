@@ -398,8 +398,30 @@ def admin_equipos():
     return paginas.render_equipos(
         equipos=equipos, miembros_por_equipo=miembros,
         n_sin_equipo=db.resumen()["sin_equipo"],
+        grupos=db.grupos_juntos(), participantes=db.listar_participantes(),
         avisos=_avisos(), sin_password=_sin_password(),
     )
+
+
+@app.post("/admin/juntos/nuevo")
+@requiere_admin
+def admin_juntos_nuevo():
+    ids = [i for i in (_entero_o_none(x) for x in request.form.getlist("ids"))
+           if i is not None]
+    if len(ids) < 2:
+        flash("Marca al menos a 2 personas para unirlas.", "error")
+    else:
+        db.crear_grupo_juntos(ids)
+        flash(f"Regla creada: esas {len(ids)} personas irán al mismo equipo.", "ok")
+    return redirect("/admin/equipos")
+
+
+@app.post("/admin/juntos/<grupo>/borrar")
+@requiere_admin
+def admin_juntos_borrar(grupo: str):
+    db.deshacer_grupo_juntos(grupo)
+    flash("Regla deshecha: ya no tienen por qué ir juntos.", "ok")
+    return redirect("/admin/equipos")
 
 
 @app.post("/admin/equipos/nuevo")

@@ -66,6 +66,7 @@ CREATE TABLE IF NOT EXISTS participantes (
   email         TEXT NOT NULL DEFAULT '',
   equipo_id     INTEGER REFERENCES equipos(id) ON DELETE SET NULL,
   token         TEXT NOT NULL UNIQUE,
+  grupo_sorteo  TEXT NOT NULL DEFAULT '',      -- quienes comparten grupo van JUNTOS
   visto_en      TEXT,                          -- primera vez que abrió su enlace
   revelado_en   TEXT,                          -- cuándo vio la animación del sorteo
   confirmado    INTEGER NOT NULL DEFAULT 0,    -- 0 pendiente · 1 viene · -1 no viene
@@ -127,6 +128,8 @@ def iniciar() -> None:
         con.execute("ALTER TABLE participantes ADD COLUMN apodo TEXT NOT NULL DEFAULT ''")
     if "rol" not in columnas:
         con.execute("ALTER TABLE participantes ADD COLUMN rol TEXT NOT NULL DEFAULT ''")
+    if "grupo_sorteo" not in columnas:
+        con.execute("ALTER TABLE participantes ADD COLUMN grupo_sorteo TEXT NOT NULL DEFAULT ''")
     # Semillas de configuración (solo las claves que falten)
     existentes = {r["clave"] for r in con.execute("SELECT clave FROM config")}
     for clave, valor in CONFIG_DEFECTO.items():
@@ -262,11 +265,16 @@ def miembros(equipo_id: int) -> list[dict]:
 
 def sortear(todos: bool = False) -> int:
     """
-    Reparte participantes entre los equipos de forma aleatoria y EQUILIBRADA:
-    cada persona va al equipo que menos gente tenga en ese momento. Si los
-    participantes tienen «rol» (p. ej. comercial / técnico), también se
-    equilibra cada rol entre los equipos (mismos comerciales y técnicos en
-    cada uno, dentro de lo posible).
+    Reparte participantes entre los equipos de forma aleatoria y EQUILIBRADA,
+    respetando las reglas:
+
+      1. JUNTOS: quienes comparten `grupo_sorteo` caen siempre en el MISMO
+         equipo (los grupos se colocan primero, de mayor a menor, en el equipo
+         con menos gente).
+      2. Tamaños: cada persona va al equipo que menos gente tenga.
+      3. Roles: si hay «rol» (p. ej. comercial / técnico), cada rol se reparte
+         a partes iguales entre los equipos, dentro de lo que permitan las
+         reglas anteriores.
 
     todos=False → solo reparte a quien aún no tiene equipo (respeta asignaciones a mano).
     todos=True  → borra todas las asignaciones y vuelve a sortear desde cero.
@@ -281,8 +289,12 @@ def sortear(todos: bool = False) -> int:
         con.execute("UPDATE participantes SET equipo_id = NULL, revelado_en = NULL")
 
     pendientes = con.execute(
-        "SELECT id, rol FROM participantes WHERE equipo_id IS NULL"
+        "SELECT id, rol, grupo_sorteo FROM participantes WHERE equipo_id IS NULL"
     ).fetchall()
+    n_repartidos = len(pendientes)
+    if not pendientes:
+        con.close()
+        return 0
 
     # Tamaños actuales (total y por rol) de lo ya asignado a mano
     tam_total = {
@@ -298,31 +310,118 @@ def sortear(todos: bool = False) -> int:
     ):
         tam_rol[(fila["equipo_id"], fila["r"] or "")] = fila["n"]
 
-    # Agrupar los pendientes por rol y barajar dentro de cada grupo
-    grupos: dict[str, list[int]] = {}
-    for fila in pendientes:
-        grupos.setdefault((fila["rol"] or "").strip().lower(), []).append(fila["id"])
-    for ids in grupos.values():
-        random.shuffle(ids)
-    # Primero los roles con nombre (de mayor a menor), al final los sin rol
-    orden = sorted((r for r in grupos if r), key=lambda r: -len(grupos[r]))
-    if "" in grupos:
-        orden.append("")
+    def asignar(pid: int, eid: int, rol: str) -> None:
+        # revelado_en a NULL: al cambiar de equipo vuelve a ver la animación
+        con.execute("UPDATE participantes SET equipo_id = ?, revelado_en = NULL "
+                    "WHERE id = ?", (eid, pid))
+        tam_total[eid] += 1
+        tam_rol[(eid, rol)] = tam_rol.get((eid, rol), 0) + 1
 
+    # Si un grupo «juntos» ya tiene algún miembro con equipo (puesto a mano),
+    # el resto del grupo va a ese mismo equipo, pase lo que pase.
+    anclas: dict[str, int] = {}
+    for fila in con.execute(
+        "SELECT trim(grupo_sorteo) AS g, equipo_id FROM participantes "
+        "WHERE equipo_id IS NOT NULL AND trim(grupo_sorteo) != ''"
+    ):
+        anclas.setdefault(fila["g"], fila["equipo_id"])
+
+    unidades_grupo: dict[str, list[tuple[int, str]]] = {}
+    sueltos: list[tuple[int, str]] = []
+    for fila in pendientes:
+        grupo = (fila["grupo_sorteo"] or "").strip()
+        rol = (fila["rol"] or "").strip().lower()
+        if grupo and grupo in anclas:
+            asignar(fila["id"], anclas[grupo], rol)
+        elif grupo:
+            unidades_grupo.setdefault(grupo, []).append((fila["id"], rol))
+        else:
+            sueltos.append((fila["id"], rol))
+
+    # 1) Grupos «juntos» primero, de mayor a menor, al equipo con menos gente
+    #    (a igual tamaño, al que menos repita los roles del grupo)
+    unidades = list(unidades_grupo.values())
+    random.shuffle(unidades)
+    unidades.sort(key=len, reverse=True)  # el orden aleatorio se conserva por tamaño
+    for unidad in unidades:
+        def clave_unidad(eid: int) -> tuple[int, int]:
+            solape = sum(tam_rol.get((eid, rol), 0) for _pid, rol in unidad)
+            return (tam_total[eid], solape)
+        mejor = min(clave_unidad(eid) for eid in ids_equipos)
+        eid = random.choice([i for i in ids_equipos if clave_unidad(i) == mejor])
+        for pid, rol in unidad:
+            asignar(pid, eid, rol)
+
+    # 2) El resto, rol a rol (los roles grandes primero, los sin rol al final)
+    grupos_rol: dict[str, list[int]] = {}
+    for pid, rol in sueltos:
+        grupos_rol.setdefault(rol, []).append(pid)
+    for ids in grupos_rol.values():
+        random.shuffle(ids)
+    orden = sorted((r for r in grupos_rol if r), key=lambda r: -len(grupos_rol[r]))
+    if "" in grupos_rol:
+        orden.append("")
     for rol in orden:
-        for pid in grupos[rol]:
+        for pid in grupos_rol[rol]:
             def clave(eid: int) -> tuple[int, int]:
                 return (tam_rol.get((eid, rol), 0), tam_total[eid])
             mejor = min(clave(eid) for eid in ids_equipos)
             eid = random.choice([i for i in ids_equipos if clave(i) == mejor])
-            # revelado_en a NULL: al cambiar de equipo vuelve a ver la animación
-            con.execute("UPDATE participantes SET equipo_id = ?, revelado_en = NULL "
-                        "WHERE id = ?", (eid, pid))
-            tam_rol[(eid, rol)] = tam_rol.get((eid, rol), 0) + 1
-            tam_total[eid] += 1
+            asignar(pid, eid, rol)
     con.commit()
     con.close()
-    return len(pendientes)
+    return n_repartidos
+
+
+def crear_grupo_juntos(ids: list[int]) -> str:
+    """
+    Marca a varias personas para que el sorteo las meta SIEMPRE en el mismo
+    equipo. Si alguna ya estaba en otro grupo, se muda a este.
+    Devuelve el nombre del grupo (G1, G2, …).
+    """
+    con = conexion()
+    existentes = {
+        r[0] for r in con.execute(
+            "SELECT DISTINCT trim(grupo_sorteo) FROM participantes "
+            "WHERE trim(grupo_sorteo) != ''"
+        )
+    }
+    n = 1
+    while f"G{n}" in existentes:
+        n += 1
+    grupo = f"G{n}"
+    con.executemany(
+        "UPDATE participantes SET grupo_sorteo = ? WHERE id = ?",
+        [(grupo, pid) for pid in ids],
+    )
+    con.commit()
+    con.close()
+    return grupo
+
+
+def deshacer_grupo_juntos(grupo: str) -> None:
+    con = conexion()
+    con.execute(
+        "UPDATE participantes SET grupo_sorteo = '' WHERE trim(grupo_sorteo) = ?",
+        (grupo.strip(),),
+    )
+    con.commit()
+    con.close()
+
+
+def grupos_juntos() -> list[dict]:
+    """Los grupos «van juntos»: [{grupo, miembros: [{id, nombre, apodo, rol}]}]."""
+    con = conexion()
+    filas = con.execute(
+        "SELECT id, nombre, apodo, rol, trim(grupo_sorteo) AS grupo "
+        "FROM participantes WHERE trim(grupo_sorteo) != '' "
+        "ORDER BY grupo, nombre COLLATE NOCASE"
+    ).fetchall()
+    con.close()
+    grupos: dict[str, list[dict]] = {}
+    for fila in filas:
+        grupos.setdefault(fila["grupo"], []).append(dict(fila))
+    return [{"grupo": g, "miembros": miembros} for g, miembros in grupos.items()]
 
 
 def _buscar_o_crear_equipo(con: sqlite3.Connection, nombre: str) -> int:

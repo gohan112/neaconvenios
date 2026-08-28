@@ -158,6 +158,17 @@ details summary{cursor:pointer;color:var(--gris);font-size:14px;margin-top:8px}
 .silencio{color:var(--gris);font-size:14px}
 .punto-color{display:inline-block;width:14px;height:14px;border-radius:50%;
              vertical-align:-2px;margin-right:6px}
+.selector-personas{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0}
+.selector-personas label{display:inline-flex;align-items:center;gap:6px;
+                         background:var(--fondo);border:1px solid var(--borde);
+                         border-radius:999px;padding:5px 12px;font-size:14px;
+                         cursor:pointer;margin:0;color:var(--tinta);font-weight:400}
+.selector-personas label:has(input:checked){background:#FCE9EA;
+                                            border-color:var(--rojo);font-weight:600}
+.selector-personas input{margin:0;accent-color:var(--rojo)}
+.regla-juntos{display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+              padding:8px 0;border-bottom:1px dashed var(--borde)}
+.regla-juntos:last-of-type{border-bottom:0}
 .sorteo-escena{text-align:center;padding:8px 0 4px}
 .caja-sorteo{width:200px;height:200px;margin:22px auto 10px;border-radius:28px;
              background:linear-gradient(150deg,#FFD766,#E8A013);padding:12px;
@@ -665,6 +676,11 @@ def _insignia_estado(p: dict) -> str:
 
 def render_participantes(lista: list[dict], equipos: list[dict],
                          avisos=None, sin_password=False) -> str:
+    companeros_grupo: dict[str, list[str]] = {}
+    for p in lista:
+        grupo = (p.get("grupo_sorteo") or "").strip()
+        if grupo:
+            companeros_grupo.setdefault(grupo, []).append(nombre_corto(p))
     filas = ""
     for p in lista:
         if p.get("equipo_nombre"):
@@ -672,7 +688,14 @@ def render_participantes(lista: list[dict], equipos: list[dict],
                            + e(p["equipo_nombre"]))
         else:
             equipo_html = '<span class="silencio">—</span>'
-        detalle = " · ".join(x for x in (p.get("apodo"), p.get("rol")) if x)
+        partes_detalle = [x for x in (p.get("apodo"), p.get("rol")) if x]
+        grupo = (p.get("grupo_sorteo") or "").strip()
+        if grupo:
+            otros = [n for n in companeros_grupo.get(grupo, [])
+                     if n != nombre_corto(p)]
+            if otros:
+                partes_detalle.append("🔗 va con " + ", ".join(otros))
+        detalle = " · ".join(partes_detalle)
         detalle_html = f'<div class="silencio">{e(detalle)}</div>' if detalle else ""
         filas += f"""
 <tr>
@@ -795,8 +818,44 @@ def render_participante_editar(p: dict, equipos: list[dict], enlace: str,
                         avisos=avisos, sin_password=sin_password)
 
 
+def _tarjeta_juntos(grupos: list[dict], participantes: list[dict]) -> str:
+    reglas = ""
+    for g in grupos:
+        nombres = " + ".join(f"<strong>{e(nombre_corto(m))}</strong>"
+                             for m in g["miembros"])
+        reglas += f"""
+<div class="regla-juntos">🔗 {nombres}
+  <form class="compacta" method="post" action="/admin/juntos/{e(g['grupo'])}/borrar">
+    <button class="boton secundario mini" type="submit">Deshacer</button>
+  </form>
+</div>"""
+    if not reglas:
+        reglas = ('<p class="silencio">No hay ninguna regla todavía. Marca abajo a '
+                  'las personas y pulsa «Unir».</p>')
+    casillas = ""
+    for p in participantes:
+        marca = " 🔗" if (p.get("grupo_sorteo") or "").strip() else ""
+        casillas += (f'<label title="{e(p["nombre"])}">'
+                     f'<input type="checkbox" name="ids" value="{p["id"]}">'
+                     f'{e(nombre_corto(p))}{marca}</label>')
+    return f"""
+<div class="tarjeta">
+  <h2>🔗 Personas que van juntas</h2>
+  <p class="silencio">El sorteo sigue siendo aleatorio, pero a las personas unidas
+  con una regla las mete <strong>siempre en el mismo equipo</strong>. Puedes crear
+  varias parejas o grupos.</p>
+  {reglas}
+  <form method="post" action="/admin/juntos/nuevo">
+    <div class="selector-personas">{casillas}</div>
+    <button class="boton secundario" type="submit">🔗 Unir a los marcados</button>
+  </form>
+</div>"""
+
+
 def render_equipos(equipos: list[dict], miembros_por_equipo: dict[int, list[dict]],
-                   n_sin_equipo: int, avisos=None, sin_password=False) -> str:
+                   n_sin_equipo: int, grupos: list[dict],
+                   participantes: list[dict], avisos=None,
+                   sin_password=False) -> str:
     filas = ""
     for eq in equipos:
         nombres = ", ".join(
@@ -838,6 +897,8 @@ def render_equipos(equipos: list[dict], miembros_por_equipo: dict[int, list[dict
   </form>
 </div>
 
+{_tarjeta_juntos(grupos, participantes)}
+
 <div class="tarjeta">
   <h2>🎲 Sorteo de equipos</h2>
   {aviso_sorteo}
@@ -855,8 +916,9 @@ def render_equipos(equipos: list[dict], miembros_por_equipo: dict[int, list[dict
   <p class="silencio" style="margin-bottom:0">El reparto es aleatorio y equilibrado:
   cada persona entra en el equipo que menos gente tiene, y si los participantes
   tienen <strong>rol</strong> (p. ej. comercial / técnico) también se reparte cada
-  rol a partes iguales entre los equipos. Las asignaciones hechas a mano se
-  respetan si usas «Repartir a los que no tienen equipo».</p>
+  rol a partes iguales entre los equipos. Las reglas <strong>🔗 van juntos</strong>
+  se respetan siempre. Las asignaciones hechas a mano se respetan si usas
+  «Repartir a los que no tienen equipo».</p>
 </div>
 
 {filas or '<p class="silencio">Aún no hay equipos.</p>'}
