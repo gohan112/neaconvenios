@@ -137,10 +137,13 @@ def ver_participante(token: str):
     cfg = db.leer_config()
     id_lugar_escape = _entero_o_none(cfg.get("escape_lugar_id"))
     lugar_escape = db.lugar(id_lugar_escape) if id_lugar_escape else None
+    id_lugar_karts = _entero_o_none(cfg.get("karts_lugar_id"))
+    lugar_karts = db.lugar(id_lugar_karts) if id_lugar_karts else None
     return paginas.render_participante(
         cfg=cfg, p=p, equipo=equipo, companeros=companeros,
         agenda=db.agenda_para(p["equipo_id"]), lugares=db.listar_lugares(),
-        referencia=db.hoy(), lugar_escape=lugar_escape, avisos=_avisos(),
+        referencia=db.hoy(), lugar_escape=lugar_escape,
+        lugar_karts=lugar_karts, avisos=_avisos(),
     )
 
 
@@ -572,6 +575,7 @@ def admin_tandas_config():
         "karts_hora1": db.normalizar_hora(request.form.get("karts_hora1", "")),
         "karts_hora2": db.normalizar_hora(request.form.get("karts_hora2", "")),
         "karts_hora3": db.normalizar_hora(request.form.get("karts_hora3", "")),
+        "karts_lugar_id": request.form.get("karts_lugar_id", ""),
     })
     flash("Horas de las tandas guardadas.", "ok")
     return redirect("/admin/agenda")

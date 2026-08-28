@@ -48,6 +48,7 @@ CONFIG_DEFECTO = {
     "karts_hora1": "11:30",
     "karts_hora2": "12:00",
     "karts_hora3": "12:45",
+    "karts_lugar_id": "",
     # Escape room: hora de llegada, salas (una por línea, «Nombre: descripción»)
     # y lugar (id de la pestaña Lugares, para el botón «cómo llegar»)
     "escape_titulo": "Escape room",

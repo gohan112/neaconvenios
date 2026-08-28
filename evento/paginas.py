@@ -599,6 +599,7 @@ def render_participante(cfg: dict, p: dict, equipo: dict | None,
                         companeros: list[dict], agenda: list[dict],
                         lugares: list[dict], referencia: date,
                         lugar_escape: dict | None = None,
+                        lugar_karts: dict | None = None,
                         avisos=None) -> str:
     contador = cuenta_atras(cfg.get("fecha", ""), referencia)
     chip = f'<span class="fecha-chip">{e(contador)}</span>' if contador else ""
@@ -642,13 +643,21 @@ def render_participante(cfg: dict, p: dict, equipo: dict | None,
         extra = ('<div class="silencio">A la 3ª tanda, la final, también irán los '
                  '2 mejores tiempos de las tandas anteriores.</div>'
                  if tanda == "3" else "")
+        sitio_karts = ""
+        if lugar_karts:
+            url = enlace_maps(lugar_karts)
+            nombre_sitio = e(lugar_karts["nombre"])
+            sitio_karts = (f'<div class="agenda-lugar">📍 <a href="{e(url)}" '
+                           f'target="_blank" rel="noopener">{nombre_sitio}</a></div>'
+                           if url else
+                           f'<div class="agenda-lugar">📍 {nombre_sitio}</div>')
         aviso_tanda = f"""
 <div class="tarjeta" style="border-color:var(--rojo)">
   <h2>🏎️ {e(cfg.get('karts_nombre') or 'Karts')}</h2>
   <div class="agenda-item">
     <div class="agenda-hora">{e(hora_tanda)}</div>
     <div class="agenda-texto"><strong>Te toca en la {ORDINAL_TANDA[tanda]} tanda</strong>
-    {extra}</div>
+    {extra}{sitio_karts}</div>
   </div>
 </div>"""
     cuerpo = f"""
@@ -1168,8 +1177,13 @@ def _tarjeta_salas(cfg: dict, equipos: list[dict], lugares: list[dict],
 </div>"""
 
 
-def _tarjeta_tandas(cfg: dict, participantes: list[dict]) -> str:
+def _tarjeta_tandas(cfg: dict, participantes: list[dict],
+                    lugares: list[dict]) -> str:
     nombre = cfg.get("karts_nombre") or "Karts"
+    opciones_lugar = '<option value="">— Sin lugar —</option>'
+    for lugar_ in lugares:
+        sel = " selected" if str(lugar_["id"]) == (cfg.get("karts_lugar_id") or "") else ""
+        opciones_lugar += f'<option value="{lugar_["id"]}"{sel}>{e(lugar_["nombre"])}</option>'
     listas = ""
     hay_tandas = any((p.get("tanda") or "").strip() for p in participantes)
     for t in ("1", "2", "3"):
@@ -1197,7 +1211,8 @@ def _tarjeta_tandas(cfg: dict, participantes: list[dict]) -> str:
     <div><label>1ª tanda</label><input name="karts_hora1" type="time" value="{e(cfg.get('karts_hora1'))}"></div>
     <div><label>2ª tanda</label><input name="karts_hora2" type="time" value="{e(cfg.get('karts_hora2'))}"></div>
     <div><label>3ª tanda (final)</label><input name="karts_hora3" type="time" value="{e(cfg.get('karts_hora3'))}"></div>
-    <button class="boton mini" type="submit">Guardar horas</button>
+    <div><label>Lugar</label><select name="karts_lugar_id">{opciones_lugar}</select></div>
+    <button class="boton mini" type="submit">Guardar</button>
   </form>
   <div class="acciones" style="margin-top:10px">
     <form class="compacta" method="post" action="/admin/tandas/sortear"
@@ -1260,7 +1275,7 @@ def render_agenda(items: list[dict], lugares: list[dict], equipos: list[dict],
   sala y asígnale su equipo — cada participante ve solo la suya).</p>
 </div>
 {_tarjeta_salas(cfg, equipos, lugares, salas)}
-{_tarjeta_tandas(cfg, participantes)}
+{_tarjeta_tandas(cfg, participantes, lugares)}
 <div class="tarjeta">
   <h2>Programa del día ({len(items)})</h2>
   {tabla}
