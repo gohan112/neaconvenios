@@ -17,9 +17,12 @@ python3 -m venv venv
 ./venv/bin/pip install --upgrade pip
 ./venv/bin/pip install -r requirements.txt
 
-echo ">> 3/4 Contraseña del panel (vacía de momento; PONLA antes de repartir enlaces)…"
-if [ ! -f /etc/neaevento.env ]; then
-  printf 'EVENTO_ADMIN_PASSWORD=\n' | sudo tee /etc/neaevento.env >/dev/null
+echo ">> 3/4 Contraseña del panel…"
+PASS_NUEVA=""
+if [ ! -f /etc/neaevento.env ] || ! sudo grep -q '^EVENTO_ADMIN_PASSWORD=..*' /etc/neaevento.env; then
+  # Se genera una contraseña aleatoria y se enseña al final (apúntala)
+  PASS_NUEVA="$(head -c 256 /dev/urandom | tr -dc 'A-Za-z0-9' | cut -c1-14)"
+  printf 'EVENTO_ADMIN_PASSWORD=%s\n' "$PASS_NUEVA" | sudo tee /etc/neaevento.env >/dev/null
   sudo chmod 600 /etc/neaevento.env
 fi
 
@@ -49,11 +52,16 @@ IP="$(curl -s ifconfig.me || echo TU_IP_PUBLICA)"
 echo ""
 echo "============================================================"
 echo "  NeaEvento en marcha."
-echo "  Panel de organización:  http://$IP:8502/admin"
-echo "  (Falta abrir el puerto 8502 en el firewall de Lightsail)"
 echo ""
-echo "  IMPORTANTE antes de repartir enlaces:"
-echo "   1) Pon la contraseña:  sudo nano /etc/neaevento.env"
-echo "      y reinicia:         sudo systemctl restart neaevento"
+echo "  Panel de organización:  http://$IP:8502/admin"
+if [ -n "$PASS_NUEVA" ]; then
+  echo "  Contraseña del panel:   $PASS_NUEVA   <-- APÚNTALA"
+else
+  echo "  Contraseña del panel:   la de siempre (está en /etc/neaevento.env)"
+fi
+echo ""
+echo "  Te quedan solo 2 pasos:"
+echo "   1) En la web de Lightsail: instancia -> pestaña «Networking» ->"
+echo "      «+ Add rule» -> TCP, puerto 8502 -> Save."
 echo "   2) En el panel ⚙️ Evento, fija la URL pública: http://$IP:8502"
 echo "============================================================"

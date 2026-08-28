@@ -65,11 +65,19 @@ Evento.command`.
 
 ## Publicarla en internet (para que lleguen los enlaces)
 
-Opción A — servidor Ubuntu/Lightsail (igual que NeaConvenios):
+Opción A — servidor Ubuntu/Lightsail (igual que NeaConvenios). En el terminal
+del navegador de Lightsail («Connect using SSH») basta pegar UN comando:
 
 ```bash
-bash deploy/setup.sh     # deja el servicio corriendo en el puerto 8502
+curl -fsSL https://raw.githubusercontent.com/gohan112/neaconvenios/claude/event-app-day-12-e4lcrp/evento/deploy/lightsail.sh | bash
 ```
+
+Descarga el código, deja el servicio corriendo en el puerto 8502, genera la
+contraseña del panel y la muestra al final. Solo quedan 2 pasos manuales:
+abrir el puerto 8502 en la pestaña «Networking» de la instancia y fijar la
+URL pública en ⚙️ Evento. (Si la rama ya se fusionó, cambia
+`claude/event-app-day-12-e4lcrp` por `main` en la URL. Con el código ya en el
+servidor: `bash deploy/setup.sh`.)
 
 Opción B — Docker:
 
