@@ -43,7 +43,13 @@ seguridad es copiar ese fichero.
 4. **🗓️ Agenda** y **📍 Lugares** — el programa del día, cada actividad con su
    hora, lugar y, si hace falta, solo para un equipo (rotaciones). Los lugares
    con dirección generan solos el botón «Cómo llegar» (o pega el enlace exacto
-   de Google Maps).
+   de Google Maps). En Agenda están además los otros dos sorteos del día:
+   **🗝️ Salas de la escape room** (una sala por equipo, al azar, con
+   restricción opcional «esta sala no puede tocarle a este equipo») y
+   **🏎️ Tandas de karts** (8 y 8 al azar repartiendo cada equipo entre ambas;
+   los que quedan fuera, a la 3ª — la final — junto a los mejores tiempos, que
+   se ajustan a mano en la ficha de cada participante). Cada participante ve
+   su sala y su tanda en su Programa.
 5. **🔗 Enlaces** — cada participante tiene su enlace personal. Repártelos con
    el botón de **WhatsApp** (mensaje ya escrito, plantilla editable), copiando
    uno a uno, o descargando el **CSV** para Excel/correo. En **📊 Resumen** ves

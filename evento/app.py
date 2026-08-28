@@ -134,10 +134,13 @@ def ver_participante(token: str):
 
     equipo = db.equipo(p["equipo_id"]) if p["equipo_id"] else None
     companeros = db.miembros(p["equipo_id"]) if p["equipo_id"] else []
+    cfg = db.leer_config()
+    id_lugar_escape = _entero_o_none(cfg.get("escape_lugar_id"))
+    lugar_escape = db.lugar(id_lugar_escape) if id_lugar_escape else None
     return paginas.render_participante(
-        cfg=db.leer_config(), p=p, equipo=equipo, companeros=companeros,
+        cfg=cfg, p=p, equipo=equipo, companeros=companeros,
         agenda=db.agenda_para(p["equipo_id"]), lugares=db.listar_lugares(),
-        referencia=db.hoy(), avisos=_avisos(),
+        referencia=db.hoy(), lugar_escape=lugar_escape, avisos=_avisos(),
     )
 
 
@@ -384,6 +387,7 @@ def admin_participante_guardar(participante_id: int):
         email=request.form.get("email", ""),
         equipo_id=_entero_o_none(request.form.get("equipo_id")),
         notas=request.form.get("notas", ""),
+        tanda=request.form.get("tanda", ""),
     )
     flash("Guardado.", "ok")
     return redirect("/admin/participantes")
@@ -494,10 +498,83 @@ def admin_sorteo():
 @app.get("/admin/agenda")
 @requiere_admin
 def admin_agenda():
+    cfg = db.leer_config()
     return paginas.render_agenda(
         items=db.listar_agenda(), lugares=db.listar_lugares(),
-        equipos=db.listar_equipos(), avisos=_avisos(), sin_password=_sin_password(),
+        equipos=db.listar_equipos(), cfg=cfg,
+        participantes=db.listar_participantes(),
+        salas=db.parsear_salas(cfg.get("escape_salas", "")),
+        avisos=_avisos(), sin_password=_sin_password(),
     )
+
+
+@app.post("/admin/tandas/sortear")
+@requiere_admin
+def admin_tandas_sortear():
+    n1, n2, n3 = db.sortear_tandas()
+    flash(f"Tandas sorteadas: {n1} en la 1ª, {n2} en la 2ª y {n3} en la 3ª "
+          f"(a la 3ª se sumarán los mejores tiempos).", "ok")
+    return redirect("/admin/agenda")
+
+
+@app.post("/admin/tandas/deshacer")
+@requiere_admin
+def admin_tandas_deshacer():
+    db.deshacer_tandas()
+    flash("Tandas deshechas.", "ok")
+    return redirect("/admin/agenda")
+
+
+@app.post("/admin/salas/config")
+@requiere_admin
+def admin_salas_config():
+    db.guardar_config({
+        "escape_titulo": request.form.get("escape_titulo", "Escape room"),
+        "escape_hora": db.normalizar_hora(request.form.get("escape_hora", "")),
+        "escape_salas": request.form.get("escape_salas", ""),
+        "escape_lugar_id": request.form.get("escape_lugar_id", ""),
+    })
+    flash("Datos de la escape room guardados.", "ok")
+    return redirect("/admin/agenda")
+
+
+@app.post("/admin/salas/sortear")
+@requiere_admin
+def admin_salas_sortear():
+    salas = db.parsear_salas(db.leer_config().get("escape_salas", ""))
+    try:
+        db.sortear_salas(
+            salas,
+            sala_excluida=request.form.get("sala_excluida", ""),
+            equipo_excluido=_entero_o_none(request.form.get("equipo_excluido")),
+        )
+    except ValueError as exc:
+        flash(str(exc), "error")
+        return redirect("/admin/agenda")
+    reparto = ", ".join(f"{eq['nombre']} → {eq['sala']}" for eq in db.listar_equipos())
+    flash(f"Salas sorteadas: {reparto}.", "ok")
+    return redirect("/admin/agenda")
+
+
+@app.post("/admin/salas/deshacer")
+@requiere_admin
+def admin_salas_deshacer():
+    db.deshacer_salas()
+    flash("Reparto de salas deshecho.", "ok")
+    return redirect("/admin/agenda")
+
+
+@app.post("/admin/tandas/config")
+@requiere_admin
+def admin_tandas_config():
+    db.guardar_config({
+        "karts_nombre": request.form.get("karts_nombre", "Karts"),
+        "karts_hora1": db.normalizar_hora(request.form.get("karts_hora1", "")),
+        "karts_hora2": db.normalizar_hora(request.form.get("karts_hora2", "")),
+        "karts_hora3": db.normalizar_hora(request.form.get("karts_hora3", "")),
+    })
+    flash("Horas de las tandas guardadas.", "ok")
+    return redirect("/admin/agenda")
 
 
 def _datos_actividad() -> dict:
@@ -631,6 +708,7 @@ def _filas_enlaces(url_base: str) -> list[dict]:
         filas.append({"nombre": p["nombre"], "apodo": p.get("apodo") or "",
                       "rol": p.get("rol") or "", "telefono": p["telefono"],
                       "email": p["email"], "equipo": p.get("equipo_nombre") or "",
+                      "tanda": p.get("tanda") or "",
                       "confirmado": p["confirmado"], "visto_en": p.get("visto_en"),
                       "enlace": enlace, "wa": wa})
     return filas
@@ -656,11 +734,12 @@ def admin_enlaces_csv():
     # ';' y BOM para que el Excel en español lo abra en columnas directamente
     escritor = csv.writer(salida, delimiter=";")
     escritor.writerow(["Nombre", "Apodo", "Rol", "Teléfono", "Email", "Equipo",
-                       "Enlace personal", "Asistencia", "Abrió el enlace"])
+                       "Tanda karts", "Enlace personal", "Asistencia",
+                       "Abrió el enlace"])
     estados = {1: "Viene", -1: "No viene", 0: "Sin responder"}
     for f in _filas_enlaces(url_base):
         escritor.writerow([f["nombre"], f["apodo"], f["rol"], f["telefono"],
-                           f["email"], f["equipo"],
+                           f["email"], f["equipo"], f["tanda"],
                            f["enlace"], estados.get(f["confirmado"], ""),
                            f["visto_en"] or ""])
     datos = salida.getvalue().encode("utf-8-sig")

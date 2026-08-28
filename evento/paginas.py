@@ -598,6 +598,7 @@ function abrirPestana(nombre, btn){
 def render_participante(cfg: dict, p: dict, equipo: dict | None,
                         companeros: list[dict], agenda: list[dict],
                         lugares: list[dict], referencia: date,
+                        lugar_escape: dict | None = None,
                         avisos=None) -> str:
     contador = cuenta_atras(cfg.get("fecha", ""), referencia)
     chip = f'<span class="fecha-chip">{e(contador)}</span>' if contador else ""
@@ -608,6 +609,48 @@ def render_participante(cfg: dict, p: dict, equipo: dict | None,
         '<div class="tarjeta"><p class="silencio" style="margin:0">Los lugares se '
         'publicarán aquí.</p></div>')
     ruta_equipo = f"/p/{p['token']}/equipo.json" if equipo else ""
+
+    # Su sala de la escape room, si está sorteada
+    aviso_sala = ""
+    if equipo and (equipo.get("sala") or "").strip():
+        enlace_sitio = ""
+        if lugar_escape:
+            url = enlace_maps(lugar_escape)
+            sitio = e(lugar_escape["nombre"])
+            enlace_sitio = (f'<div class="agenda-lugar">📍 <a href="{e(url)}" '
+                            f'target="_blank" rel="noopener">{sitio}</a></div>'
+                            if url else f'<div class="agenda-lugar">📍 {sitio}</div>')
+        descripcion_sala = (f'<div class="silencio">{e(equipo.get("sala_desc"))}</div>'
+                            if equipo.get("sala_desc") else "")
+        aviso_sala = f"""
+<div class="tarjeta" style="border-color:var(--rojo)">
+  <h2>🗝️ {e(cfg.get('escape_titulo') or 'Escape room')}</h2>
+  <div class="agenda-item">
+    <div class="agenda-hora">{e(cfg.get('escape_hora'))}</div>
+    <div class="agenda-texto"><strong>Vuestra sala: {e(equipo['sala'])}</strong>
+    {descripcion_sala}{enlace_sitio}
+    <div class="silencio">Hay que estar allí a las {e(cfg.get('escape_hora'))}.</div>
+    </div>
+  </div>
+</div>"""
+
+    # Su tanda de karts, si está sorteada
+    aviso_tanda = ""
+    tanda = (p.get("tanda") or "").strip()
+    if tanda in ORDINAL_TANDA:
+        hora_tanda = cfg.get(f"karts_hora{tanda}") or ""
+        extra = ('<div class="silencio">A la 3ª tanda, la final, también irán los '
+                 '2 mejores tiempos de las tandas anteriores.</div>'
+                 if tanda == "3" else "")
+        aviso_tanda = f"""
+<div class="tarjeta" style="border-color:var(--rojo)">
+  <h2>🏎️ {e(cfg.get('karts_nombre') or 'Karts')}</h2>
+  <div class="agenda-item">
+    <div class="agenda-hora">{e(hora_tanda)}</div>
+    <div class="agenda-texto"><strong>Te toca en la {ORDINAL_TANDA[tanda]} tanda</strong>
+    {extra}</div>
+  </div>
+</div>"""
     cuerpo = f"""
 <h1>¡Hola, {e(nombre_pila)}! 👋</h1>
 <div class="silencio"><strong>{e(cfg.get('nombre'))}</strong><br>
@@ -624,6 +667,8 @@ def render_participante(cfg: dict, p: dict, equipo: dict | None,
   {_bloque_equipo(p, equipo, companeros)}
 </div>
 <div class="panel-pestana" id="panel-programa">
+  {aviso_sala}
+  {aviso_tanda}
   {_bloque_agenda(agenda)}
 </div>
 <div class="panel-pestana" id="panel-lugares">
@@ -890,6 +935,11 @@ def render_participante_editar(p: dict, equipos: list[dict], enlace: str,
     <label>Email</label><input name="email" type="email" value="{e(p['email'])}" style="width:100%">
     <label>Equipo</label>
     <select name="equipo_id" style="width:100%">{_opciones_equipos(equipos, p['equipo_id'])}</select>
+    <label>Tanda de karts</label>
+    <select name="tanda" style="width:100%">
+      <option value="">— Sin tanda —</option>
+      {"".join(f'<option value="{t}"{" selected" if (p.get("tanda") or "").strip() == t else ""}>{ORDINAL_TANDA[t]} tanda</option>' for t in ("1", "2", "3"))}
+    </select>
     <label>Notas (solo las ve la organización)</label>
     <textarea name="notas" rows="3" style="width:100%">{e(p['notas'])}</textarea>
     <div style="margin-top:12px" class="acciones">
@@ -1059,7 +1109,116 @@ def _formulario_actividad(accion: str, lugares: list[dict], equipos: list[dict],
 </form>"""
 
 
+ORDINAL_TANDA = {"1": "1ª", "2": "2ª", "3": "3ª"}
+
+
+def _tarjeta_salas(cfg: dict, equipos: list[dict], lugares: list[dict],
+                   salas: list[dict]) -> str:
+    titulo = cfg.get("escape_titulo") or "Escape room"
+    opciones_lugar = '<option value="">— Sin lugar —</option>'
+    for lugar_ in lugares:
+        sel = " selected" if str(lugar_["id"]) == (cfg.get("escape_lugar_id") or "") else ""
+        opciones_lugar += f'<option value="{lugar_["id"]}"{sel}>{e(lugar_["nombre"])}</option>'
+    opciones_sala = '<option value="">— (sin restricción) —</option>'
+    for s in salas:
+        opciones_sala += f'<option value="{e(s["nombre"])}">{e(s["nombre"])}</option>'
+    reparto = ""
+    if any((eq.get("sala") or "").strip() for eq in equipos):
+        for eq in equipos:
+            reparto += (f'<div style="margin:4px 0">'
+                        f'{_simbolo_equipo(eq.get("color"), eq.get("emoji"))}'
+                        f'<strong>{e(eq["nombre"])}</strong> → '
+                        f'{e(eq.get("sala")) or "<span class=silencio>—</span>"}</div>')
+    else:
+        reparto = ('<p class="silencio">Salas aún sin sortear. Haz primero el sorteo '
+                   'de equipos y luego pulsa «Sortear salas».</p>')
+    return f"""
+<div class="tarjeta">
+  <h2>🗝️ Salas de la {e(titulo)}</h2>
+  <form method="post" action="/admin/salas/config">
+    <div class="linea" style="display:flex;gap:8px;flex-wrap:wrap">
+      <div><label>Actividad</label>
+        <input name="escape_titulo" value="{e(titulo)}" size="12"></div>
+      <div><label>Hora (hay que estar allí)</label>
+        <input name="escape_hora" type="time" value="{e(cfg.get('escape_hora'))}"></div>
+      <div><label>Lugar</label>
+        <select name="escape_lugar_id">{opciones_lugar}</select></div>
+    </div>
+    <label>Salas (una por línea: «Nombre: descripción») — debe haber una por equipo</label>
+    <textarea name="escape_salas" rows="4" style="width:100%">{e(cfg.get('escape_salas'))}</textarea>
+    <div style="margin-top:8px"><button class="boton mini" type="submit">Guardar</button></div>
+  </form>
+  <form method="post" action="/admin/salas/sortear" style="margin-top:12px"
+        onsubmit="return confirm('Se sorteará qué sala juega cada equipo (si ya había reparto, se rehace). ¿Seguir?')">
+    <div class="linea" style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end">
+      <div><label>Restricción (opcional): la sala…</label>
+        <select name="sala_excluida">{opciones_sala}</select></div>
+      <div><label>…NO puede tocarle al equipo</label>
+        <select name="equipo_excluido">{_opciones_equipos(equipos, texto_vacio="— (ninguno) —")}</select></div>
+      <button class="boton" type="submit">🎲 Sortear salas</button>
+    </div>
+  </form>
+  <form class="compacta" method="post" action="/admin/salas/deshacer"
+        onsubmit="return confirm('¿Quitar el reparto de salas?')">
+    <button class="boton secundario mini" type="submit" style="margin-top:8px">Deshacer</button>
+  </form>
+  <p class="silencio">Cada participante verá su sala (con su descripción y el
+  «cómo llegar») en su Programa.</p>
+  {reparto}
+</div>"""
+
+
+def _tarjeta_tandas(cfg: dict, participantes: list[dict]) -> str:
+    nombre = cfg.get("karts_nombre") or "Karts"
+    listas = ""
+    hay_tandas = any((p.get("tanda") or "").strip() for p in participantes)
+    for t in ("1", "2", "3"):
+        hora = cfg.get(f"karts_hora{t}") or ""
+        chips = ""
+        for p in participantes:
+            if (p.get("tanda") or "").strip() == t:
+                chips += (f'<span class="chip">'
+                          f'{_simbolo_equipo(p.get("equipo_color"), p.get("equipo_emoji")) if p.get("equipo_nombre") else ""}'
+                          f'{e(nombre_corto(p))}</span>')
+        extra = (' <span class="silencio">+ los 2 mejores tiempos de las tandas '
+                 'anteriores</span>' if t == "3" else "")
+        if hay_tandas:
+            listas += (f'<div style="margin:6px 0"><strong>{ORDINAL_TANDA[t]} tanda '
+                       f'· {e(hora)}</strong>{extra}<br>'
+                       f'{chips or "<span class=silencio>—</span>"}</div>')
+    if not hay_tandas:
+        listas = ('<p class="silencio">Aún no hay tandas sorteadas. Haz primero el '
+                  'sorteo de equipos y luego pulsa «Sortear tandas».</p>')
+    return f"""
+<div class="tarjeta">
+  <h2>🏎️ Tandas de {e(nombre)}</h2>
+  <form class="linea" method="post" action="/admin/tandas/config">
+    <div><label>Actividad</label><input name="karts_nombre" value="{e(nombre)}" size="10"></div>
+    <div><label>1ª tanda</label><input name="karts_hora1" type="time" value="{e(cfg.get('karts_hora1'))}"></div>
+    <div><label>2ª tanda</label><input name="karts_hora2" type="time" value="{e(cfg.get('karts_hora2'))}"></div>
+    <div><label>3ª tanda (final)</label><input name="karts_hora3" type="time" value="{e(cfg.get('karts_hora3'))}"></div>
+    <button class="boton mini" type="submit">Guardar horas</button>
+  </form>
+  <div class="acciones" style="margin-top:10px">
+    <form class="compacta" method="post" action="/admin/tandas/sortear"
+          onsubmit="return confirm('Se sortearán las tandas (si ya había, se rehacen). ¿Seguir?')">
+      <button class="boton" type="submit">🎲 Sortear tandas</button>
+    </form>
+    <form class="compacta" method="post" action="/admin/tandas/deshacer"
+          onsubmit="return confirm('¿Quitar todas las tandas?')">
+      <button class="boton secundario mini" type="submit">Deshacer</button>
+    </form>
+  </div>
+  <p class="silencio">8 y 8 al azar en las dos primeras (repartiendo cada equipo
+  entre ambas); los que quedan fuera van a la 3ª, la final, junto a los 2 mejores
+  tiempos (eso se decide en la pista — puedes cambiar la tanda de cualquiera en
+  su ficha). Cada participante ve su tanda y su hora en su Programa.</p>
+  {listas}
+</div>"""
+
+
 def render_agenda(items: list[dict], lugares: list[dict], equipos: list[dict],
+                  cfg: dict, participantes: list[dict], salas: list[dict],
                   avisos=None, sin_password=False) -> str:
     filas = ""
     for a in items:
@@ -1097,8 +1256,11 @@ def render_agenda(items: list[dict], lugares: list[dict], equipos: list[dict],
   {_formulario_actividad('/admin/agenda/nueva', lugares, equipos)}
   <p class="silencio" style="margin-bottom:0">«¿Para quién?» → <strong>Todos</strong> es
   lo normal; elige un equipo solo para rotaciones o pruebas específicas de ese
-  equipo (cada participante ve lo general + lo de su equipo).</p>
+  equipo (p. ej. cada equipo a su sala de la escape room: crea una actividad por
+  sala y asígnale su equipo — cada participante ve solo la suya).</p>
 </div>
+{_tarjeta_salas(cfg, equipos, lugares, salas)}
+{_tarjeta_tandas(cfg, participantes)}
 <div class="tarjeta">
   <h2>Programa del día ({len(items)})</h2>
   {tabla}

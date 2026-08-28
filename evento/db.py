@@ -43,6 +43,21 @@ CONFIG_DEFECTO = {
                 "Los nombres de los {participantes} participantes ya están en el bombo.\n"
                 "El sorteo es totalmente aleatorio: nadie sabe dónde caerá cada uno…\n"
                 "¡Pasemos al sorteo!",
+    # Tandas de karts (o similar): horas de cada tanda y nombre de la actividad
+    "karts_nombre": "Karts",
+    "karts_hora1": "11:30",
+    "karts_hora2": "12:00",
+    "karts_hora3": "12:45",
+    # Escape room: hora de llegada, salas (una por línea, «Nombre: descripción»)
+    # y lugar (id de la pestaña Lugares, para el botón «cómo llegar»)
+    "escape_titulo": "Escape room",
+    "escape_hora": "08:40",
+    "escape_salas": "Luxor: nuestra famosa pirámide, aventura, sustos…\n"
+                    "Barbarroja: un viejo búnker soviético que tendrá que repeler "
+                    "el ataque nazi\n"
+                    "Infamia: un submarino japonés es el primero en llegar a "
+                    "Pearl Harbor",
+    "escape_lugar_id": "",
     "url_base": "",
     "contacto": "",
     "msg_whatsapp": "¡Hola, {nombre}! Este es tu enlace personal para el evento: {enlace}\n"
@@ -61,7 +76,9 @@ CREATE TABLE IF NOT EXISTS equipos (
   nombre      TEXT NOT NULL,
   color       TEXT NOT NULL DEFAULT '#CC0C18',
   emoji       TEXT NOT NULL DEFAULT '',
-  descripcion TEXT NOT NULL DEFAULT ''
+  descripcion TEXT NOT NULL DEFAULT '',
+  sala        TEXT NOT NULL DEFAULT '',   -- sala de la escape room sorteada
+  sala_desc   TEXT NOT NULL DEFAULT ''
 );
 
 CREATE TABLE IF NOT EXISTS participantes (
@@ -137,6 +154,13 @@ def iniciar() -> None:
         con.execute("ALTER TABLE participantes ADD COLUMN rol TEXT NOT NULL DEFAULT ''")
     if "grupo_sorteo" not in columnas:
         con.execute("ALTER TABLE participantes ADD COLUMN grupo_sorteo TEXT NOT NULL DEFAULT ''")
+    if "tanda" not in columnas:
+        con.execute("ALTER TABLE participantes ADD COLUMN tanda TEXT NOT NULL DEFAULT ''")
+    columnas_eq = {r["name"] for r in con.execute("PRAGMA table_info(equipos)")}
+    if "sala" not in columnas_eq:
+        con.execute("ALTER TABLE equipos ADD COLUMN sala TEXT NOT NULL DEFAULT ''")
+    if "sala_desc" not in columnas_eq:
+        con.execute("ALTER TABLE equipos ADD COLUMN sala_desc TEXT NOT NULL DEFAULT ''")
     # Semillas de configuración (solo las claves que falten)
     existentes = {r["clave"] for r in con.execute("SELECT clave FROM config")}
     for clave, valor in CONFIG_DEFECTO.items():
@@ -445,6 +469,139 @@ def grupos_juntos() -> list[dict]:
     return [{"grupo": g, "miembros": miembros} for g, miembros in grupos.items()]
 
 
+def sortear_tandas() -> tuple[int, int, int]:
+    """
+    Reparte a TODOS los participantes en las tandas de karts:
+      · Tanda 1 y tanda 2: 8 personas cada una, al azar pero repartiendo a cada
+        equipo más o menos por igual entre ambas.
+      · Los que no caben (con 18 personas, 2): tanda 3 — la final, a la que
+        además irán los mejores tiempos (eso se decide en la pista, no aquí).
+    Devuelve (n_tanda1, n_tanda2, n_tanda3).
+    """
+    con = conexion()
+    filas = con.execute("SELECT id, equipo_id FROM participantes").fetchall()
+    personas = [(f["id"], f["equipo_id"] or 0) for f in filas]
+    random.shuffle(personas)
+
+    # Primero, los que van directos a la 3ª (los que exceden de 16),
+    # intentando que sean de equipos distintos
+    n_fuera = max(0, len(personas) - 16)
+    fuera: list[int] = []
+    equipos_usados: set[int] = set()
+    for pid, eq in personas:
+        if len(fuera) >= n_fuera:
+            break
+        if eq not in equipos_usados:
+            fuera.append(pid)
+            equipos_usados.add(eq)
+    for pid, _eq in personas:  # si hicieran falta más que equipos hay, se repite
+        if len(fuera) >= n_fuera:
+            break
+        if pid not in fuera:
+            fuera.append(pid)
+
+    # El resto: equipo a equipo, ALTERNANDO estrictamente entre tanda 1 y 2
+    # (empezando por la más vacía). Así cada equipo queda repartido entre las
+    # dos tandas con diferencia de 1 como mucho, y los totales acaban en 8 y 8.
+    ids_fuera = set(fuera)
+    cupo = {1: 8, 2: 8}
+    tam = {1: 0, 2: 0}
+    asignacion: dict[int, int] = {}
+    por_equipo: dict[int, list[int]] = {}
+    for pid, eq in personas:  # `personas` ya viene barajada
+        if pid not in ids_fuera:
+            por_equipo.setdefault(eq, []).append(pid)
+    orden_equipos = list(por_equipo)
+    random.shuffle(orden_equipos)
+    for eq in orden_equipos:
+        if tam[1] < tam[2]:
+            lado = 1
+        elif tam[2] < tam[1]:
+            lado = 2
+        else:
+            lado = random.choice((1, 2))
+        for pid in por_equipo[eq]:
+            if tam[lado] >= cupo[lado]:
+                lado = 3 - lado
+            if tam[lado] >= cupo[lado]:  # ambas llenas: a la 3ª tanda
+                fuera.append(pid)
+                continue
+            asignacion[pid] = lado
+            tam[lado] += 1
+            lado = 3 - lado
+
+    for pid, tanda in asignacion.items():
+        con.execute("UPDATE participantes SET tanda = ? WHERE id = ?",
+                    (str(tanda), pid))
+    for pid in fuera:
+        con.execute("UPDATE participantes SET tanda = '3' WHERE id = ?", (pid,))
+    con.commit()
+    con.close()
+    return tam[1], tam[2], len(fuera)
+
+
+def deshacer_tandas() -> None:
+    con = conexion()
+    con.execute("UPDATE participantes SET tanda = ''")
+    con.commit()
+    con.close()
+
+
+def parsear_salas(texto: str) -> list[dict]:
+    """Líneas «Nombre: descripción» → [{nombre, descripcion}]."""
+    salas = []
+    for linea in (texto or "").splitlines():
+        linea = linea.strip().lstrip("•-· ").strip()
+        if not linea:
+            continue
+        if ":" in linea:
+            nombre, descripcion = linea.split(":", 1)
+        else:
+            nombre, descripcion = linea, ""
+        if nombre.strip():
+            salas.append({"nombre": nombre.strip(), "descripcion": descripcion.strip()})
+    return salas
+
+
+def sortear_salas(salas: list[dict], sala_excluida: str = "",
+                  equipo_excluido: int | None = None) -> None:
+    """
+    Reparte al azar una sala de la escape room a cada equipo. Si se indica una
+    exclusión («la sala X no puede tocarle al equipo Y»), se respeta.
+    """
+    equipos_ = listar_equipos()
+    if not equipos_:
+        raise ValueError("No hay equipos: créalos antes de sortear las salas.")
+    if len(salas) != len(equipos_):
+        raise ValueError(f"Hay {len(salas)} sala(s) y {len(equipos_)} equipo(s): "
+                         f"deben coincidir para el sorteo.")
+    orden = None
+    for _ in range(500):
+        candidato = random.sample(salas, len(salas))
+        valido = all(
+            not (sala["nombre"] == sala_excluida.strip() and eq["id"] == equipo_excluido)
+            for eq, sala in zip(equipos_, candidato)
+        )
+        if valido:
+            orden = candidato
+            break
+    if orden is None:
+        raise ValueError("No hay ningún reparto posible con esa restricción.")
+    con = conexion()
+    for eq, sala in zip(equipos_, orden):
+        con.execute("UPDATE equipos SET sala = ?, sala_desc = ? WHERE id = ?",
+                    (sala["nombre"], sala["descripcion"], eq["id"]))
+    con.commit()
+    con.close()
+
+
+def deshacer_salas() -> None:
+    con = conexion()
+    con.execute("UPDATE equipos SET sala = '', sala_desc = ''")
+    con.commit()
+    con.close()
+
+
 def _buscar_o_crear_equipo(con: sqlite3.Connection, nombre: str) -> int:
     fila = con.execute(
         "SELECT id FROM equipos WHERE lower(nombre) = lower(?)", (nombre.strip(),)
@@ -573,16 +730,16 @@ def participante_por_token(token: str) -> dict | None:
 
 def editar_participante(participante_id: int, nombre: str, telefono: str, email: str,
                         equipo_id: int | None, notas: str, apodo: str = "",
-                        rol: str = "") -> None:
+                        rol: str = "", tanda: str = "") -> None:
     con = conexion()
     actual = con.execute(
         "SELECT equipo_id FROM participantes WHERE id = ?", (participante_id,)
     ).fetchone()
     con.execute(
         "UPDATE participantes SET nombre = ?, apodo = ?, rol = ?, telefono = ?, "
-        "email = ?, equipo_id = ?, notas = ? WHERE id = ?",
+        "email = ?, equipo_id = ?, notas = ?, tanda = ? WHERE id = ?",
         (nombre.strip(), apodo.strip(), rol.strip(), telefono.strip(), email.strip(),
-         equipo_id, notas.strip(), participante_id),
+         equipo_id, notas.strip(), tanda.strip(), participante_id),
     )
     if actual and actual["equipo_id"] != equipo_id:
         # Cambia de equipo → volverá a ver la animación del sorteo con el nuevo
