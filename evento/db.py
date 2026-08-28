@@ -270,7 +270,9 @@ def sortear(todos: bool = False) -> int:
 
       1. JUNTOS: quienes comparten `grupo_sorteo` caen siempre en el MISMO
          equipo (los grupos se colocan primero, de mayor a menor, en el equipo
-         con menos gente).
+         con menos gente). Además, cada grupo evita los equipos donde ya hay
+         OTRO grupo: mientras haya equipos de sobra, cada regla cae en un
+         equipo distinto (si hay más reglas que equipos, se reparten).
       2. Tamaños: cada persona va al equipo que menos gente tenga.
       3. Roles: si hay «rol» (p. ej. comercial / técnico), cada rol se reparte
          a partes iguales entre los equipos, dentro de lo que permitan las
@@ -338,21 +340,32 @@ def sortear(todos: bool = False) -> int:
         else:
             sueltos.append((fila["id"], rol))
 
-    # 1) Grupos «juntos» primero, de mayor a menor, al equipo con menos gente
-    #    (a igual tamaño, al que menos repita los roles del grupo)
+    # 1) Grupos «juntos» primero, de mayor a menor. Cada grupo va al equipo con
+    #    menos gente, evitando los equipos que YA tienen otro grupo (así cada
+    #    regla cae en un equipo distinto mientras haya equipos de sobra); a
+    #    igualdad, al que menos repita los roles del grupo.
+    equipos_con_grupo: set[int] = {
+        fila["equipo_id"] for fila in con.execute(
+            "SELECT DISTINCT equipo_id FROM participantes "
+            "WHERE equipo_id IS NOT NULL AND trim(grupo_sorteo) != ''"
+        )
+    }
     unidades = list(unidades_grupo.values())
     random.shuffle(unidades)
     unidades.sort(key=len, reverse=True)  # el orden aleatorio se conserva por tamaño
     for unidad in unidades:
-        def clave_unidad(eid: int) -> tuple[int, int]:
+        def clave_unidad(eid: int) -> tuple[int, int, int]:
             solape = sum(tam_rol.get((eid, rol), 0) for _pid, rol in unidad)
-            return (tam_total[eid], solape)
+            return (1 if eid in equipos_con_grupo else 0, tam_total[eid], solape)
         mejor = min(clave_unidad(eid) for eid in ids_equipos)
         eid = random.choice([i for i in ids_equipos if clave_unidad(i) == mejor])
         for pid, rol in unidad:
             asignar(pid, eid, rol)
+        equipos_con_grupo.add(eid)
 
-    # 2) El resto, rol a rol (los roles grandes primero, los sin rol al final)
+    # 2) El resto, rol a rol (los roles grandes primero, los sin rol al final).
+    #    Primero manda el TAMAÑO (nunca sobrellenar un equipo) y, a igualdad,
+    #    el equipo al que le falte ese rol.
     grupos_rol: dict[str, list[int]] = {}
     for pid, rol in sueltos:
         grupos_rol.setdefault(rol, []).append(pid)
@@ -364,7 +377,7 @@ def sortear(todos: bool = False) -> int:
     for rol in orden:
         for pid in grupos_rol[rol]:
             def clave(eid: int) -> tuple[int, int]:
-                return (tam_rol.get((eid, rol), 0), tam_total[eid])
+                return (tam_total[eid], tam_rol.get((eid, rol), 0))
             mejor = min(clave(eid) for eid in ids_equipos)
             eid = random.choice([i for i in ids_equipos if clave(i) == mejor])
             asignar(pid, eid, rol)
