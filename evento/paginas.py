@@ -271,6 +271,9 @@ fieldset{border:0;margin:0;padding:0}
 .tabla td:first-child,.tabla th:first-child{padding-left:0}
 .tabla td:last-child,.tabla th:last-child{padding-right:0}
 .envoltorio-tabla{overflow-x:auto;-webkit-overflow-scrolling:touch}
+/* La columna de botones se ciñe a su contenido y no se sale de la tabla */
+.tabla td.acciones{width:1%;white-space:nowrap;justify-content:flex-end;
+                   flex-wrap:nowrap}
 .nowrap{white-space:nowrap}
 @media (max-width:620px){.solo-ancho{display:none}}
 
@@ -306,10 +309,12 @@ fieldset{border:0;margin:0;padding:0}
 .pestanas{display:flex;gap:6px;margin:var(--e4) 0 var(--e2);position:sticky;top:0;
           z-index:20;background:var(--fondo);padding:8px 0;
           box-shadow:0 8px 12px -10px rgba(35,35,31,.35)}
-.pestanas button{flex:1 1 0;min-width:0;padding:7px 2px 8px;border-radius:12px;
+.pestanas button{flex:1 1 0;min-width:0;padding:7px 1px 8px;border-radius:12px;
                  border:1px solid var(--borde);background:var(--papel);font:inherit;
                  font-size:12.5px;font-weight:700;color:var(--tinta);cursor:pointer;
-                 min-height:52px;line-height:1.25;transition:background .15s,color .15s}
+                 min-height:52px;line-height:1.25;transition:background .15s,color .15s;
+                 /* el nombre nunca se parte por la mitad («Progra/ma») */
+                 overflow-wrap:normal;word-break:normal}
 .pestanas button:hover{background:var(--fondo)}
 .pestanas button.activa{background:var(--acento);border-color:var(--acento);
                         color:var(--acento-tinta);box-shadow:var(--sombra-media)}
@@ -430,6 +435,9 @@ details summary:hover{color:var(--rojo)}
   .equipo-cabecera{margin:calc(var(--e3) * -1) calc(var(--e3) * -1) var(--e3);
                    padding:var(--e3)}
   .pestanas button{font-size:11.5px}
+}
+@media (max-width:360px){
+  .pestanas button{font-size:10.5px;letter-spacing:-.2px}
   .agenda-hora{min-width:52px}
   .kpi{padding:var(--e3)}
   .kpi .valor{font-size:24px}
@@ -898,6 +906,18 @@ function abrirPestana(nombre, btn){
   window.addEventListener('hashchange', function(){
     mostrarPestana((location.hash || '').replace('#', ''));
   });
+  // Con teclado, las flechas mueven entre secciones (lo esperable en pestañas)
+  var botones = [].slice.call(document.querySelectorAll('.pestanas button'));
+  botones.forEach(function(b, i){
+    b.addEventListener('keydown', function(ev){
+      var salto = ev.key === 'ArrowRight' ? 1 : (ev.key === 'ArrowLeft' ? -1 : 0);
+      if (!salto) return;
+      ev.preventDefault();
+      var otro = botones[(i + salto + botones.length) % botones.length];
+      otro.focus();
+      abrirPestana(otro.getAttribute('data-p'), otro);
+    });
+  });
 })();
 
 // --- El equipo se completa en directo según pasan por el sorteo
@@ -1056,10 +1076,13 @@ def render_participante(cfg: dict, p: dict, equipo: dict | None,
             f'<strong>Te toca en la {ORDINAL_TANDA[tanda]} tanda</strong>'
             f'{extra}{sitio_karts}')
 
+    # El día del evento lo que hace falta es saber a dónde ir ahora, así que se
+    # abre el Programa; los días previos, el equipo (que es la novedad).
+    inicial = "programa" if hora_actual else "equipo"
     pestanas = ""
     for clave, etiqueta in [("equipo", "🎽 Equipo"), ("programa", "🗓️ Programa"),
                             ("puntos", "🏆 Puntos"), ("lugares", "📍 Lugares")]:
-        activa = " activa" if clave == "equipo" else ""
+        activa = " activa" if clave == inicial else ""
         pestanas += (f'<button type="button" role="tab" data-p="{clave}"'
                      f' aria-controls="panel-{clave}"'
                      f' aria-selected="{"true" if activa else "false"}"'
@@ -1077,10 +1100,12 @@ def render_participante(cfg: dict, p: dict, equipo: dict | None,
 {bienvenida}
 {_bloque_asistencia(p, cfg)}
 <nav class="pestanas" role="tablist" aria-label="Secciones">{pestanas}</nav>
-<div class="panel-pestana activa" id="panel-equipo" role="tabpanel">
+<div class="panel-pestana{' activa' if inicial == 'equipo' else ''}"
+     id="panel-equipo" role="tabpanel">
   {_bloque_equipo(p, equipo, companeros)}
 </div>
-<div class="panel-pestana" id="panel-programa" role="tabpanel">
+<div class="panel-pestana{' activa' if inicial == 'programa' else ''}"
+     id="panel-programa" role="tabpanel">
   {aviso_sala}
   {aviso_tanda}
   {_bloque_agenda(agenda, hora_actual)}
@@ -1197,17 +1222,15 @@ def render_puntos(cfg: dict, clasif: dict, equipos: list[dict],
     for eq in equipos:
         capitan = next((nombre_corto(p) for p in participantes
                         if p["id"] == eq.get("capitan_id")), None)
-        nota_capitan = (f'<span class="silencio">capitán: 👑 {e(capitan)}</span>'
-                        if capitan else '<span class="silencio">sin capitán aún</span>')
+        nota_capitan = (f'👑 {e(capitan)}' if capitan else "sin capitán aún")
         filas_escape += f"""
-<div class="acciones" style="margin:8px 0;flex-wrap:nowrap">
-  <label for="te{eq['id']}" style="margin:0;min-width:120px;color:var(--tinta);
-         font-size:15px">{_simbolo_equipo(eq.get('color'), eq.get('emoji'))}
-  {e(eq['nombre'])}</label>
+<div class="fila-tiempo" style="align-items:flex-start">
+  <label for="te{eq['id']}" style="color:var(--tinta);font-size:15px">
+    {_simbolo_equipo(eq.get('color'), eq.get('emoji'))}{e(eq['nombre'])}
+    <div class="silencio" style="font-size:13px;font-weight:500">{nota_capitan}</div>
+  </label>
   <input id="te{eq['id']}" name="tiempo_{eq['id']}" value="{e(eq.get('tiempo_escape'))}"
-         placeholder="10:05" size="7" inputmode="numeric"
-         style="width:96px;flex:none;font-variant-numeric:tabular-nums">
-  {nota_capitan}
+         placeholder="10:05" size="7" inputmode="numeric" style="width:100px">
 </div>"""
 
     filas_karts = ""
