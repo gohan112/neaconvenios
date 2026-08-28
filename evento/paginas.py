@@ -32,6 +32,14 @@ def e(valor) -> str:
     return str(escape("" if valor is None else str(valor)))
 
 
+def nombre_corto(p: dict) -> str:
+    """Cómo llamar a la persona: su apodo si lo tiene, o su primer nombre."""
+    apodo = (p.get("apodo") or "").strip()
+    if apodo:
+        return apodo
+    return (p.get("nombre", "").split() or [""])[0]
+
+
 def fecha_bonita(iso: str) -> str:
     try:
         d = date.fromisoformat((iso or "").strip())
@@ -338,7 +346,7 @@ def render_sorteo(cfg: dict, p: dict, equipos: list[dict], indice_final: int) ->
     # json.dumps con ensure_ascii y sin '</' peligrosos para incrustar en <script>
     json_equipos = json.dumps(datos_equipos, ensure_ascii=True).replace("</", "<\\/")
     equipo_final = equipos[indice_final]
-    nombre_pila = (p["nombre"].split() or [""])[0]
+    nombre_pila = nombre_corto(p)
     ruta_revelado = f"/p/{p['token']}/revelado"
     cuerpo = f"""
 <div class="sorteo-escena">
@@ -414,9 +422,9 @@ def _bloque_equipo(p: dict, equipo: dict | None, companeros: list[dict]) -> str:
     chips = ""
     for m in companeros:
         if m["id"] == p["id"]:
-            chips += f'<span class="chip yo">{e(m["nombre"])} (tú)</span>'
+            chips += f'<span class="chip yo">{e(nombre_corto(m))} (tú)</span>'
         else:
-            chips += f'<span class="chip">{e(m["nombre"])}</span>'
+            chips += f'<span class="chip" title="{e(m["nombre"])}">{e(nombre_corto(m))}</span>'
     descripcion = (f'<p class="silencio" style="margin:4px 0 10px">'
                    f'{e(equipo.get("descripcion"))}</p>'
                    if equipo.get("descripcion") else "")
@@ -495,7 +503,7 @@ def render_participante(cfg: dict, p: dict, equipo: dict | None,
     chip = f'<span class="fecha-chip">{e(contador)}</span>' if contador else ""
     contacto = (f'<div class="pie">¿Dudas? Contacta con {e(cfg.get("contacto"))}</div>'
                 if cfg.get("contacto") else "")
-    nombre_pila = (p["nombre"].split() or [""])[0]
+    nombre_pila = nombre_corto(p)
     cuerpo = f"""
 <h1>¡Hola, {e(nombre_pila)}! 👋</h1>
 <div class="silencio"><strong>{e(cfg.get('nombre'))}</strong><br>
@@ -663,9 +671,11 @@ def render_participantes(lista: list[dict], equipos: list[dict],
                            + e(p["equipo_nombre"]))
         else:
             equipo_html = '<span class="silencio">—</span>'
+        detalle = " · ".join(x for x in (p.get("apodo"), p.get("rol")) if x)
+        detalle_html = f'<div class="silencio">{e(detalle)}</div>' if detalle else ""
         filas += f"""
 <tr>
-  <td><strong>{e(p['nombre'])}</strong></td>
+  <td><strong>{e(p['nombre'])}</strong>{detalle_html}</td>
   <td>{e(p['telefono']) or '<span class="silencio">—</span>'}</td>
   <td>{equipo_html}</td>
   <td>{_insignia_estado(p)}</td>
@@ -685,11 +695,17 @@ def render_participantes(lista: list[dict], equipos: list[dict],
   <h2>Añadir participante</h2>
   <form class="linea" method="post" action="/admin/participantes/nuevo">
     <div><label>Nombre *</label><input name="nombre" required placeholder="Nombre y apellidos"></div>
+    <div><label>Apodo</label><input name="apodo" size="10" placeholder="Bea"></div>
+    <div><label>Rol</label><input name="rol" size="10" placeholder="comercial / técnico"></div>
     <div><label>Teléfono</label><input name="telefono" placeholder="6XXXXXXXX"></div>
     <div><label>Email</label><input name="email" type="email"></div>
     <div><label>Equipo</label><select name="equipo_id">{_opciones_equipos(equipos)}</select></div>
     <button class="boton" type="submit">Añadir</button>
   </form>
+  <p class="silencio" style="margin-bottom:0">El <strong>apodo</strong> es como le
+  saluda la app («¡Hola, Bea!»). El <strong>rol</strong> (p. ej. comercial /
+  técnico) sirve para que el sorteo reparta los roles a partes iguales entre
+  los equipos.</p>
 </div>
 
 <div class="tarjeta">
@@ -697,8 +713,8 @@ def render_participantes(lista: list[dict], equipos: list[dict],
   <form class="linea" method="post" action="/admin/participantes/importar"
         enctype="multipart/form-data">
     <div>
-      <label>Excel (.xlsx) o CSV — columnas: nombre, telefono, email, equipo
-      (solo «nombre» es obligatoria)</label>
+      <label>Excel (.xlsx) o CSV — columnas: nombre, apodo, rol, telefono, email,
+      equipo (solo «nombre» es obligatoria)</label>
       <input type="file" name="fichero" accept=".csv,.xlsx,.txt" required>
     </div>
     <button class="boton secundario" type="submit">Importar</button>
@@ -733,6 +749,10 @@ def render_participante_editar(p: dict, equipos: list[dict], enlace: str,
 <div class="tarjeta" style="max-width:560px">
   <form method="post" action="/admin/participantes/{p['id']}/guardar">
     <label>Nombre *</label><input name="nombre" required value="{e(p['nombre'])}" style="width:100%">
+    <label>Apodo (como le saluda la app)</label>
+    <input name="apodo" value="{e(p.get('apodo'))}" style="width:100%">
+    <label>Rol (p. ej. comercial / técnico — el sorteo los reparte a partes iguales)</label>
+    <input name="rol" value="{e(p.get('rol'))}" style="width:100%">
     <label>Teléfono</label><input name="telefono" value="{e(p['telefono'])}" style="width:100%">
     <label>Email</label><input name="email" type="email" value="{e(p['email'])}" style="width:100%">
     <label>Equipo</label>
@@ -776,7 +796,11 @@ def render_equipos(equipos: list[dict], miembros_por_equipo: dict[int, list[dict
                    n_sin_equipo: int, avisos=None, sin_password=False) -> str:
     filas = ""
     for eq in equipos:
-        nombres = ", ".join(e(m["nombre"]) for m in miembros_por_equipo.get(eq["id"], []))
+        nombres = ", ".join(
+            e(f"{m['nombre']} ({m['rol'].strip()})" if (m.get("rol") or "").strip()
+              else m["nombre"])
+            for m in miembros_por_equipo.get(eq["id"], [])
+        )
         filas += f"""
 <div class="tarjeta">
   <form class="linea" method="post" action="/admin/equipos/{eq['id']}/guardar">
@@ -826,8 +850,10 @@ def render_equipos(equipos: list[dict], miembros_por_equipo: dict[int, list[dict
     </form>
   </div>
   <p class="silencio" style="margin-bottom:0">El reparto es aleatorio y equilibrado:
-  cada persona entra en el equipo que menos gente tiene. Las asignaciones hechas a
-  mano se respetan si usas «Repartir a los que no tienen equipo».</p>
+  cada persona entra en el equipo que menos gente tiene, y si los participantes
+  tienen <strong>rol</strong> (p. ej. comercial / técnico) también se reparte cada
+  rol a partes iguales entre los equipos. Las asignaciones hechas a mano se
+  respetan si usas «Repartir a los que no tienen equipo».</p>
 </div>
 
 {filas or '<p class="silencio">Aún no hay equipos.</p>'}
@@ -1062,7 +1088,7 @@ def render_evento(cfg: dict, avisos=None, sin_password=False) -> str:
     <label>URL pública de la app (para generar los enlaces personales)</label>
     <input name="url_base" value="{e(cfg.get('url_base'))}" style="width:100%"
            placeholder="https://evento.neamaster.com o http://IP:8502">
-    <label>Plantilla del mensaje de WhatsApp — usa {{nombre}} y {{enlace}}</label>
+    <label>Plantilla del mensaje de WhatsApp — usa {{nombre}}, {{apodo}} y {{enlace}}</label>
     <textarea name="msg_whatsapp" rows="4" style="width:100%">{e(cfg.get('msg_whatsapp'))}</textarea>
     <div style="margin-top:12px">
       <button class="boton" type="submit">Guardar</button>

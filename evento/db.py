@@ -60,6 +60,8 @@ CREATE TABLE IF NOT EXISTS equipos (
 CREATE TABLE IF NOT EXISTS participantes (
   id            INTEGER PRIMARY KEY AUTOINCREMENT,
   nombre        TEXT NOT NULL,
+  apodo         TEXT NOT NULL DEFAULT '',    -- cómo le llaman (para el saludo)
+  rol           TEXT NOT NULL DEFAULT '',    -- p. ej. comercial / técnico
   telefono      TEXT NOT NULL DEFAULT '',
   email         TEXT NOT NULL DEFAULT '',
   equipo_id     INTEGER REFERENCES equipos(id) ON DELETE SET NULL,
@@ -117,10 +119,14 @@ def conexion() -> sqlite3.Connection:
 def iniciar() -> None:
     con = conexion()
     con.executescript(ESQUEMA)
-    # Migración para bases de datos creadas antes de existir la columna
+    # Migraciones para bases de datos creadas antes de existir estas columnas
     columnas = {r["name"] for r in con.execute("PRAGMA table_info(participantes)")}
     if "revelado_en" not in columnas:
         con.execute("ALTER TABLE participantes ADD COLUMN revelado_en TEXT")
+    if "apodo" not in columnas:
+        con.execute("ALTER TABLE participantes ADD COLUMN apodo TEXT NOT NULL DEFAULT ''")
+    if "rol" not in columnas:
+        con.execute("ALTER TABLE participantes ADD COLUMN rol TEXT NOT NULL DEFAULT ''")
     # Semillas de configuración (solo las claves que falten)
     existentes = {r["clave"] for r in con.execute("SELECT clave FROM config")}
     for clave, valor in CONFIG_DEFECTO.items():
@@ -246,7 +252,8 @@ def equipo(equipo_id: int) -> dict | None:
 def miembros(equipo_id: int) -> list[dict]:
     con = conexion()
     filas = con.execute(
-        "SELECT id, nombre FROM participantes WHERE equipo_id = ? ORDER BY nombre COLLATE NOCASE",
+        "SELECT id, nombre, apodo, rol FROM participantes WHERE equipo_id = ? "
+        "ORDER BY nombre COLLATE NOCASE",
         (equipo_id,),
     ).fetchall()
     con.close()
@@ -255,8 +262,11 @@ def miembros(equipo_id: int) -> list[dict]:
 
 def sortear(todos: bool = False) -> int:
     """
-    Reparte participantes entre los equipos de forma aleatoria y EQUILIBRADA
-    (cada persona va al equipo que menos gente tenga en ese momento).
+    Reparte participantes entre los equipos de forma aleatoria y EQUILIBRADA:
+    cada persona va al equipo que menos gente tenga en ese momento. Si los
+    participantes tienen «rol» (p. ej. comercial / técnico), también se
+    equilibra cada rol entre los equipos (mismos comerciales y técnicos en
+    cada uno, dentro de lo posible).
 
     todos=False → solo reparte a quien aún no tiene equipo (respeta asignaciones a mano).
     todos=True  → borra todas las asignaciones y vuelve a sortear desde cero.
@@ -269,23 +279,47 @@ def sortear(todos: bool = False) -> int:
         raise ValueError("No hay equipos: crea los equipos antes de sortear.")
     if todos:
         con.execute("UPDATE participantes SET equipo_id = NULL, revelado_en = NULL")
-    pendientes = [r["id"] for r in con.execute(
-        "SELECT id FROM participantes WHERE equipo_id IS NULL"
-    )]
-    tam = {
+
+    pendientes = con.execute(
+        "SELECT id, rol FROM participantes WHERE equipo_id IS NULL"
+    ).fetchall()
+
+    # Tamaños actuales (total y por rol) de lo ya asignado a mano
+    tam_total = {
         eid: con.execute(
             "SELECT COUNT(*) FROM participantes WHERE equipo_id = ?", (eid,)
         ).fetchone()[0]
         for eid in ids_equipos
     }
-    random.shuffle(pendientes)
-    for pid in pendientes:
-        minimo = min(tam.values())
-        eid = random.choice([i for i in ids_equipos if tam[i] == minimo])
-        # revelado_en a NULL: al cambiar de equipo vuelve a ver la animación del sorteo
-        con.execute("UPDATE participantes SET equipo_id = ?, revelado_en = NULL "
-                    "WHERE id = ?", (eid, pid))
-        tam[eid] += 1
+    tam_rol: dict[tuple[int, str], int] = {}
+    for fila in con.execute(
+        "SELECT equipo_id, lower(trim(rol)) AS r, COUNT(*) AS n FROM participantes "
+        "WHERE equipo_id IS NOT NULL GROUP BY equipo_id, r"
+    ):
+        tam_rol[(fila["equipo_id"], fila["r"] or "")] = fila["n"]
+
+    # Agrupar los pendientes por rol y barajar dentro de cada grupo
+    grupos: dict[str, list[int]] = {}
+    for fila in pendientes:
+        grupos.setdefault((fila["rol"] or "").strip().lower(), []).append(fila["id"])
+    for ids in grupos.values():
+        random.shuffle(ids)
+    # Primero los roles con nombre (de mayor a menor), al final los sin rol
+    orden = sorted((r for r in grupos if r), key=lambda r: -len(grupos[r]))
+    if "" in grupos:
+        orden.append("")
+
+    for rol in orden:
+        for pid in grupos[rol]:
+            def clave(eid: int) -> tuple[int, int]:
+                return (tam_rol.get((eid, rol), 0), tam_total[eid])
+            mejor = min(clave(eid) for eid in ids_equipos)
+            eid = random.choice([i for i in ids_equipos if clave(i) == mejor])
+            # revelado_en a NULL: al cambiar de equipo vuelve a ver la animación
+            con.execute("UPDATE participantes SET equipo_id = ?, revelado_en = NULL "
+                        "WHERE id = ?", (eid, pid))
+            tam_rol[(eid, rol)] = tam_rol.get((eid, rol), 0) + 1
+            tam_total[eid] += 1
     con.commit()
     con.close()
     return len(pendientes)
@@ -308,12 +342,14 @@ def _buscar_o_crear_equipo(con: sqlite3.Connection, nombre: str) -> int:
 # ------------------------------------------------------------------ participantes
 
 def crear_participante(nombre: str, telefono: str = "", email: str = "",
-                       equipo_id: int | None = None) -> int:
+                       equipo_id: int | None = None, apodo: str = "",
+                       rol: str = "") -> int:
     con = conexion()
     cur = con.execute(
-        "INSERT INTO participantes (nombre, telefono, email, equipo_id, token) "
-        "VALUES (?, ?, ?, ?, ?)",
-        (nombre.strip(), telefono.strip(), email.strip(), equipo_id, _token_nuevo(con)),
+        "INSERT INTO participantes (nombre, apodo, rol, telefono, email, equipo_id, token) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?)",
+        (nombre.strip(), apodo.strip(), rol.strip(), telefono.strip(), email.strip(),
+         equipo_id, _token_nuevo(con)),
     )
     con.commit()
     con.close()
@@ -322,9 +358,9 @@ def crear_participante(nombre: str, telefono: str = "", email: str = "",
 
 def importar(filas: list[dict]) -> tuple[int, int]:
     """
-    Importa participantes [{nombre, telefono, email, equipo}]. Si el equipo no
-    existe se crea. Los nombres ya existentes (sin distinguir mayúsculas) se
-    omiten para poder re-importar la misma lista sin duplicar.
+    Importa participantes [{nombre, apodo, rol, telefono, email, equipo}]. Si el
+    equipo no existe se crea. Los nombres ya existentes (sin distinguir
+    mayúsculas) se omiten para poder re-importar la misma lista sin duplicar.
     Devuelve (añadidos, omitidos).
     """
     con = conexion()
@@ -345,9 +381,10 @@ def importar(filas: list[dict]) -> tuple[int, int]:
         if nombre_equipo:
             equipo_id = _buscar_o_crear_equipo(con, nombre_equipo)
         con.execute(
-            "INSERT INTO participantes (nombre, telefono, email, equipo_id, token) "
-            "VALUES (?, ?, ?, ?, ?)",
-            (nombre, (fila.get("telefono") or "").strip(),
+            "INSERT INTO participantes (nombre, apodo, rol, telefono, email, "
+            "equipo_id, token) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (nombre, (fila.get("apodo") or "").strip(), (fila.get("rol") or "").strip(),
+             (fila.get("telefono") or "").strip(),
              (fila.get("email") or "").strip(), equipo_id, _token_nuevo(con)),
         )
         existentes.add(nombre.lower())
@@ -390,16 +427,17 @@ def participante_por_token(token: str) -> dict | None:
 
 
 def editar_participante(participante_id: int, nombre: str, telefono: str, email: str,
-                        equipo_id: int | None, notas: str) -> None:
+                        equipo_id: int | None, notas: str, apodo: str = "",
+                        rol: str = "") -> None:
     con = conexion()
     actual = con.execute(
         "SELECT equipo_id FROM participantes WHERE id = ?", (participante_id,)
     ).fetchone()
     con.execute(
-        "UPDATE participantes SET nombre = ?, telefono = ?, email = ?, equipo_id = ?, "
-        "notas = ? WHERE id = ?",
-        (nombre.strip(), telefono.strip(), email.strip(), equipo_id, notas.strip(),
-         participante_id),
+        "UPDATE participantes SET nombre = ?, apodo = ?, rol = ?, telefono = ?, "
+        "email = ?, equipo_id = ?, notas = ? WHERE id = ?",
+        (nombre.strip(), apodo.strip(), rol.strip(), telefono.strip(), email.strip(),
+         equipo_id, notas.strip(), participante_id),
     )
     if actual and actual["equipo_id"] != equipo_id:
         # Cambia de equipo → volverá a ver la animación del sorteo con el nuevo

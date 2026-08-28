@@ -28,7 +28,9 @@ convenio y actualizaciones/
 .claude/
 *.xlsx
 
-# App del evento (evento/): base de datos local y contraseña del panel
+# App del evento (evento/): base de datos local, contraseña del panel y
+# listados de participantes (datos personales: NUNCA al repositorio, que es público)
 evento/*.db
 evento/*.db-*
+evento/*.csv
 clave_admin.txt

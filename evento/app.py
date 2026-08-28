@@ -89,10 +89,11 @@ def _telefono_wa(telefono: str) -> str:
     return digitos
 
 
-def _mensaje_whatsapp(cfg: dict, nombre: str, enlace: str) -> str:
+def _mensaje_whatsapp(cfg: dict, nombre: str, enlace: str, apodo: str = "") -> str:
     plantilla = cfg.get("msg_whatsapp") or ""
+    apodo = apodo or (nombre.split() or [""])[0]
     try:
-        return plantilla.format(nombre=nombre, enlace=enlace)
+        return plantilla.format(nombre=nombre, enlace=enlace, apodo=apodo)
     except (KeyError, IndexError, ValueError):
         return f"¡Hola, {nombre}! Este es tu enlace personal para el evento: {enlace}"
 
@@ -216,6 +217,8 @@ def admin_participante_nuevo():
     else:
         db.crear_participante(
             nombre=nombre,
+            apodo=request.form.get("apodo", ""),
+            rol=request.form.get("rol", ""),
             telefono=request.form.get("telefono", ""),
             email=request.form.get("email", ""),
             equipo_id=_entero_o_none(request.form.get("equipo_id")),
@@ -239,7 +242,9 @@ def _filas_de_texto_csv(texto: str) -> list[dict]:
     if tiene_cabecera:
         indices = {}
         for i, celda in enumerate(primera):
-            if "nombre" in celda and "nombre" not in indices:
+            if "apodo" in celda and "apodo" not in indices:
+                indices["apodo"] = i
+            elif "nombre" in celda and "nombre" not in indices:
                 indices["nombre"] = i
             elif ("tel" in celda or "móvil" in celda or "movil" in celda) and "telefono" not in indices:
                 indices["telefono"] = i
@@ -247,6 +252,10 @@ def _filas_de_texto_csv(texto: str) -> list[dict]:
                 indices["email"] = i
             elif "equipo" in celda and "equipo" not in indices:
                 indices["equipo"] = i
+            elif (("rol" in celda or "perfil" in celda or "comercial" in celda
+                   or "tecnico" in celda or "técnico" in celda)
+                  and "rol" not in indices):
+                indices["rol"] = i
         filas_crudas = filas_crudas[1:]
 
     def valor(fila: list[str], campo: str) -> str:
@@ -254,7 +263,8 @@ def _filas_de_texto_csv(texto: str) -> list[dict]:
         return fila[i] if i is not None and i < len(fila) else ""
 
     return [
-        {campo: valor(fila, campo) for campo in ("nombre", "telefono", "email", "equipo")}
+        {campo: valor(fila, campo)
+         for campo in ("nombre", "apodo", "rol", "telefono", "email", "equipo")}
         for fila in filas_crudas
     ]
 
@@ -313,6 +323,8 @@ def admin_participantes_pegar():
                 "telefono": partes[1] if len(partes) > 1 else "",
                 "email": partes[2] if len(partes) > 2 else "",
                 "equipo": partes[3] if len(partes) > 3 else "",
+                "apodo": "",
+                "rol": "",
             })
     nuevos, omitidos = db.importar(filas)
     aviso = f"Añadidos {nuevos} participante(s)."
@@ -346,6 +358,8 @@ def admin_participante_guardar(participante_id: int):
         return redirect(f"/admin/participantes/{participante_id}")
     db.editar_participante(
         participante_id, nombre=nombre,
+        apodo=request.form.get("apodo", ""),
+        rol=request.form.get("rol", ""),
         telefono=request.form.get("telefono", ""),
         email=request.form.get("email", ""),
         equipo_id=_entero_o_none(request.form.get("equipo_id")),
@@ -569,9 +583,11 @@ def _filas_enlaces(url_base: str) -> list[dict]:
         telefono_wa = _telefono_wa(p["telefono"])
         wa = ""
         if telefono_wa:
-            mensaje = _mensaje_whatsapp(cfg, p["nombre"], enlace)
+            mensaje = _mensaje_whatsapp(cfg, p["nombre"], enlace,
+                                        apodo=p.get("apodo") or "")
             wa = f"https://wa.me/{telefono_wa}?text={quote(mensaje)}"
-        filas.append({"nombre": p["nombre"], "telefono": p["telefono"],
+        filas.append({"nombre": p["nombre"], "apodo": p.get("apodo") or "",
+                      "rol": p.get("rol") or "", "telefono": p["telefono"],
                       "email": p["email"], "equipo": p.get("equipo_nombre") or "",
                       "confirmado": p["confirmado"], "visto_en": p.get("visto_en"),
                       "enlace": enlace, "wa": wa})
@@ -597,11 +613,12 @@ def admin_enlaces_csv():
     salida = io.StringIO()
     # ';' y BOM para que el Excel en español lo abra en columnas directamente
     escritor = csv.writer(salida, delimiter=";")
-    escritor.writerow(["Nombre", "Teléfono", "Email", "Equipo", "Enlace personal",
-                       "Asistencia", "Abrió el enlace"])
+    escritor.writerow(["Nombre", "Apodo", "Rol", "Teléfono", "Email", "Equipo",
+                       "Enlace personal", "Asistencia", "Abrió el enlace"])
     estados = {1: "Viene", -1: "No viene", 0: "Sin responder"}
     for f in _filas_enlaces(url_base):
-        escritor.writerow([f["nombre"], f["telefono"], f["email"], f["equipo"],
+        escritor.writerow([f["nombre"], f["apodo"], f["rol"], f["telefono"],
+                           f["email"], f["equipo"],
                            f["enlace"], estados.get(f["confirmado"], ""),
                            f["visto_en"] or ""])
     datos = salida.getvalue().encode("utf-8-sig")

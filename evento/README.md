@@ -21,10 +21,13 @@ seguridad es copiar ese fichero.
    día 12), hora, mensaje de bienvenida, contacto y **URL pública** (la
    dirección donde está publicada la app: con ella se generan los enlaces).
 2. **👥 Participantes** — añádelos uno a uno, pega la lista, o importa un
-   Excel/CSV con columnas `nombre` (obligatoria), `telefono`, `email`,
-   `equipo`. Re-importar la misma lista no duplica a nadie.
+   Excel/CSV con columnas `nombre` (obligatoria), `apodo` (como le saluda la
+   app), `rol` (p. ej. comercial/técnico), `telefono`, `email`, `equipo`.
+   Re-importar la misma lista no duplica a nadie.
 3. **🎽 Equipos** — escribe los nombres separados por comas (los colores se
-   asignan solos) y pulsa **Sorteo**: reparte de forma aleatoria y equilibrada.
+   asignan solos) y pulsa **Sorteo**: reparte de forma aleatoria y equilibrada
+   (y si los participantes tienen `rol`, también reparte cada rol a partes
+   iguales entre los equipos: mismos comerciales y técnicos en cada uno).
    Las asignaciones a mano se respetan si repartes «solo a los que no tienen
    equipo». También puedes importar el reparto ya decidido (columna `equipo`
    del Excel/CSV). La primera vez que cada participante abra su enlace después
