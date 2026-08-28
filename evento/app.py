@@ -130,7 +130,8 @@ def ver_participante(token: str):
                 cfg, n_equipos=datos["equipos"],
                 n_participantes=datos["participantes"])
             return paginas.render_sorteo(cfg=cfg, p=p, equipos=equipos,
-                                         indice_final=indice, historia=historia)
+                                         indice_final=indice, historia=historia,
+                                         avisos=_avisos())
 
     equipo = db.equipo(p["equipo_id"]) if p["equipo_id"] else None
     companeros = db.miembros(p["equipo_id"]) if p["equipo_id"] else []
@@ -143,7 +144,7 @@ def ver_participante(token: str):
         cfg=cfg, p=p, equipo=equipo, companeros=companeros,
         agenda=db.agenda_para(p["equipo_id"]), lugares=db.listar_lugares(),
         referencia=db.hoy(), lugar_escape=lugar_escape,
-        lugar_karts=lugar_karts, avisos=_avisos(),
+        lugar_karts=lugar_karts, clasif=db.clasificacion(), avisos=_avisos(),
     )
 
 
@@ -154,11 +155,40 @@ def equipo_json(token: str):
     if not p or not p["equipo_id"]:
         abort(404)
     miembros = db.miembros(p["equipo_id"])
-    dentro = [{"n": paginas.nombre_corto(m), "yo": m["id"] == p["id"]}
+    equipo = db.equipo(p["equipo_id"]) or {}
+    dentro = [{"n": paginas.nombre_corto(m), "yo": m["id"] == p["id"],
+               "cap": m["id"] == equipo.get("capitan_id")}
               for m in miembros if m.get("revelado_en")]
     pendientes = len(miembros) - len(dentro)
     return jsonify(dentro=dentro, pendientes=pendientes,
                    texto=paginas._texto_contador(len(dentro), pendientes))
+
+
+@app.post("/p/<token>/tiempo_escape")
+def capitan_tiempo_escape(token: str):
+    """El capitán del equipo apunta la hora de salida de su sala."""
+    p = db.participante_por_token(token)
+    if not p or not p["equipo_id"]:
+        abort(404)
+    equipo = db.equipo(p["equipo_id"])
+    if not equipo or equipo.get("capitan_id") != p["id"]:
+        abort(403)
+    texto = (request.form.get("tiempo") or "").strip()
+    if texto and db.parsear_hora_dia(texto) is None:
+        flash("La hora no se entiende: usa el formato 10:05 (o 10:05:30).", "error")
+    else:
+        db.poner_tiempo_escape(equipo["id"], texto)
+        flash("¡Hora de salida guardada! Ya cuenta en la clasificación.", "ok")
+    return redirect(f"/p/{token}")
+
+
+@app.get("/p/<token>/puntos.html")
+def puntos_fragmento(token: str):
+    """La clasificación en HTML, para refrescarla en directo en la pestaña Puntos."""
+    p = db.participante_por_token(token)
+    if not p:
+        abort(404)
+    return paginas.fragmento_clasificacion(db.clasificacion())
 
 
 @app.post("/p/<token>/revelado")
@@ -483,6 +513,15 @@ def admin_equipo_borrar(equipo_id: int):
     return redirect("/admin/equipos")
 
 
+@app.post("/admin/capitanes/sortear")
+@requiere_admin
+def admin_capitanes_sortear():
+    n = db.sortear_capitanes()
+    flash(f"Capitanes sorteados: {n}. Cada capitán podrá meter la hora de salida "
+          f"de su sala desde su móvil.", "ok")
+    return redirect("/admin/equipos")
+
+
 @app.post("/admin/sorteo")
 @requiere_admin
 def admin_sorteo():
@@ -694,6 +733,41 @@ def admin_lugar_borrar(lugar_id: int):
     db.borrar_lugar(lugar_id)
     flash("Lugar borrado.", "ok")
     return redirect("/admin/lugares")
+
+
+# ================================================================== admin: puntos
+
+@app.get("/admin/puntos")
+@requiere_admin
+def admin_puntos():
+    return paginas.render_puntos(
+        cfg=db.leer_config(), clasif=db.clasificacion(),
+        equipos=db.listar_equipos(), participantes=db.listar_participantes(),
+        avisos=_avisos(), sin_password=_sin_password(),
+    )
+
+
+@app.post("/admin/puntos/escape")
+@requiere_admin
+def admin_puntos_escape():
+    for eq in db.listar_equipos():
+        campo = f"tiempo_{eq['id']}"
+        if campo in request.form:
+            db.poner_tiempo_escape(eq["id"], request.form.get(campo, ""))
+    db.guardar_config({"puntos_escape": request.form.get("puntos_escape", "")})
+    flash("Tiempos de la escape room guardados.", "ok")
+    return redirect("/admin/puntos")
+
+
+@app.post("/admin/puntos/karts")
+@requiere_admin
+def admin_puntos_karts():
+    for p in db.listar_participantes():
+        campo = f"tiempo_{p['id']}"
+        if campo in request.form:
+            db.poner_tiempo_karts(p["id"], request.form.get(campo, ""))
+    flash("Tiempos de karts guardados.", "ok")
+    return redirect("/admin/puntos")
 
 
 # ================================================================== admin: enlaces

@@ -59,6 +59,8 @@ CONFIG_DEFECTO = {
                     "Infamia: un submarino japonés es el primero en llegar a "
                     "Pearl Harbor",
     "escape_lugar_id": "",
+    # Puntos de la escape room por orden de salida (1º, 2º, 3º…)
+    "puntos_escape": "20, 10, 5",
     "url_base": "",
     "contacto": "",
     "msg_whatsapp": "¡Hola, {nombre}! Este es tu enlace personal para el evento: {enlace}\n"
@@ -79,7 +81,9 @@ CREATE TABLE IF NOT EXISTS equipos (
   emoji       TEXT NOT NULL DEFAULT '',
   descripcion TEXT NOT NULL DEFAULT '',
   sala        TEXT NOT NULL DEFAULT '',   -- sala de la escape room sorteada
-  sala_desc   TEXT NOT NULL DEFAULT ''
+  sala_desc   TEXT NOT NULL DEFAULT '',
+  capitan_id  INTEGER,                    -- capitán sorteado (mete el tiempo)
+  tiempo_escape TEXT NOT NULL DEFAULT '' -- hora de salida de su sala (HH:MM[:SS])
 );
 
 CREATE TABLE IF NOT EXISTS participantes (
@@ -91,6 +95,7 @@ CREATE TABLE IF NOT EXISTS participantes (
   email         TEXT NOT NULL DEFAULT '',
   equipo_id     INTEGER REFERENCES equipos(id) ON DELETE SET NULL,
   token         TEXT NOT NULL UNIQUE,
+  tiempo_karts  TEXT NOT NULL DEFAULT '',      -- su mejor vuelta (p. ej. 48.123)
   grupo_sorteo  TEXT NOT NULL DEFAULT '',      -- quienes comparten grupo van JUNTOS
   visto_en      TEXT,                          -- primera vez que abrió su enlace
   revelado_en   TEXT,                          -- cuándo vio la animación del sorteo
@@ -157,11 +162,17 @@ def iniciar() -> None:
         con.execute("ALTER TABLE participantes ADD COLUMN grupo_sorteo TEXT NOT NULL DEFAULT ''")
     if "tanda" not in columnas:
         con.execute("ALTER TABLE participantes ADD COLUMN tanda TEXT NOT NULL DEFAULT ''")
+    if "tiempo_karts" not in columnas:
+        con.execute("ALTER TABLE participantes ADD COLUMN tiempo_karts TEXT NOT NULL DEFAULT ''")
     columnas_eq = {r["name"] for r in con.execute("PRAGMA table_info(equipos)")}
     if "sala" not in columnas_eq:
         con.execute("ALTER TABLE equipos ADD COLUMN sala TEXT NOT NULL DEFAULT ''")
     if "sala_desc" not in columnas_eq:
         con.execute("ALTER TABLE equipos ADD COLUMN sala_desc TEXT NOT NULL DEFAULT ''")
+    if "capitan_id" not in columnas_eq:
+        con.execute("ALTER TABLE equipos ADD COLUMN capitan_id INTEGER")
+    if "tiempo_escape" not in columnas_eq:
+        con.execute("ALTER TABLE equipos ADD COLUMN tiempo_escape TEXT NOT NULL DEFAULT ''")
     # Semillas de configuración (solo las claves que falten)
     existentes = {r["clave"] for r in con.execute("SELECT clave FROM config")}
     for clave, valor in CONFIG_DEFECTO.items():
@@ -546,6 +557,123 @@ def deshacer_tandas() -> None:
     con.execute("UPDATE participantes SET tanda = ''")
     con.commit()
     con.close()
+
+
+def sortear_capitanes() -> int:
+    """Elige al azar un capitán por equipo (entre sus miembros). Devuelve cuántos."""
+    con = conexion()
+    elegidos = 0
+    for eq in con.execute("SELECT id FROM equipos").fetchall():
+        ids = [r["id"] for r in con.execute(
+            "SELECT id FROM participantes WHERE equipo_id = ?", (eq["id"],))]
+        capitan = random.choice(ids) if ids else None
+        con.execute("UPDATE equipos SET capitan_id = ? WHERE id = ?",
+                    (capitan, eq["id"]))
+        if capitan:
+            elegidos += 1
+    con.commit()
+    con.close()
+    return elegidos
+
+
+def poner_tiempo_escape(equipo_id: int, texto: str) -> None:
+    con = conexion()
+    con.execute("UPDATE equipos SET tiempo_escape = ? WHERE id = ?",
+                ((texto or "").strip(), equipo_id))
+    con.commit()
+    con.close()
+
+
+def poner_tiempo_karts(participante_id: int, texto: str) -> None:
+    con = conexion()
+    con.execute("UPDATE participantes SET tiempo_karts = ? WHERE id = ?",
+                ((texto or "").strip(), participante_id))
+    con.commit()
+    con.close()
+
+
+def parsear_hora_dia(texto: str) -> int | None:
+    """'10:05' o '10:05:30' → segundos desde medianoche (para ordenar salidas)."""
+    m = re.fullmatch(r"\s*(\d{1,2})[:.hH](\d{2})(?::(\d{2}))?\s*", texto or "")
+    if not m:
+        return None
+    return int(m.group(1)) * 3600 + int(m.group(2)) * 60 + int(m.group(3) or 0)
+
+
+def parsear_tiempo_vuelta(texto: str) -> int | None:
+    """'48.123', '48,3', '1:02.451' o '62' → milisegundos (para ordenar vueltas)."""
+    m = re.fullmatch(r"\s*(?:(\d+)[:'])?(\d{1,3})(?:[.,](\d{1,3}))?\s*", texto or "")
+    if not m:
+        return None
+    minutos = int(m.group(1) or 0)
+    segundos = int(m.group(2))
+    fraccion = (m.group(3) or "").ljust(3, "0")[:3]
+    return (minutos * 60 + segundos) * 1000 + int(fraccion or 0)
+
+
+def _puntos_escape_lista(cfg: dict) -> list[int]:
+    puntos = []
+    for trozo in (cfg.get("puntos_escape") or "").replace(";", ",").split(","):
+        try:
+            puntos.append(int(trozo.strip()))
+        except ValueError:
+            continue
+    return puntos or [20, 10, 5]
+
+
+def clasificacion() -> dict:
+    """
+    Calcula la clasificación de la Olimpiada:
+      · Escape room: por hora de salida (antes = mejor), puntos configurables
+        (por defecto 20 / 10 / 5).
+      · Karts: cada piloto puntúa por su mejor vuelta — el más rápido tantos
+        puntos como pilotos con tiempo, el último 1 (todos los puestos cuentan).
+      · Total por equipo = escape + karts. Gana el que más puntos tenga.
+    """
+    cfg = leer_config()
+    equipos_ = listar_equipos()
+    participantes_ = listar_participantes()
+
+    # Escape room
+    con_tiempo = [(eq, parsear_hora_dia(eq.get("tiempo_escape") or ""))
+                  for eq in equipos_]
+    validos = sorted([x for x in con_tiempo if x[1] is not None], key=lambda x: x[1])
+    lista_puntos = _puntos_escape_lista(cfg)
+    puntos_escape: dict[int, int] = {}
+    escape = []
+    for i, (eq, _segundos) in enumerate(validos):
+        pts = lista_puntos[i] if i < len(lista_puntos) else 0
+        puntos_escape[eq["id"]] = pts
+        escape.append({"equipo": eq, "tiempo": eq.get("tiempo_escape"), "puntos": pts})
+    for eq, segundos in con_tiempo:
+        if segundos is None:
+            escape.append({"equipo": eq, "tiempo": eq.get("tiempo_escape") or "",
+                           "puntos": 0})
+
+    # Karts (individual)
+    corredores = [(p, parsear_tiempo_vuelta(p.get("tiempo_karts") or ""))
+                  for p in participantes_]
+    ordenados = sorted([x for x in corredores if x[1] is not None], key=lambda x: x[1])
+    n = len(ordenados)
+    puntos_karts_equipo: dict[int, int] = {}
+    karts = []
+    for i, (p, _ms) in enumerate(ordenados):
+        pts = n - i  # el mejor se lleva n, el último 1
+        karts.append({"participante": p, "tiempo": p.get("tiempo_karts"), "puntos": pts})
+        if p.get("equipo_id"):
+            puntos_karts_equipo[p["equipo_id"]] = \
+                puntos_karts_equipo.get(p["equipo_id"], 0) + pts
+
+    # Totales por equipo
+    tabla = []
+    for eq in equipos_:
+        pts_escape = puntos_escape.get(eq["id"], 0)
+        pts_karts = puntos_karts_equipo.get(eq["id"], 0)
+        tabla.append({"equipo": eq, "escape": pts_escape, "karts": pts_karts,
+                      "total": pts_escape + pts_karts})
+    tabla.sort(key=lambda fila: -fila["total"])
+    return {"escape": escape, "karts": karts, "equipos": tabla,
+            "n_corredores": n}
 
 
 def parsear_salas(texto: str) -> list[dict]:

@@ -369,7 +369,7 @@ def render_no_encontrado(cfg: dict) -> str:
 
 
 def render_sorteo(cfg: dict, p: dict, equipos: list[dict], indice_final: int,
-                  historia: list[str]) -> str:
+                  historia: list[str], avisos=None) -> str:
     """
     Pantalla del sorteo simulado (estilo caja de ítems de Mario): primero se
     cuenta la historia del evento frase a frase, y después los colores de los
@@ -432,7 +432,7 @@ var RUTA_REVELADO = {json.dumps(ruta_revelado)};
 {GUION_SORTEO}
 </script>
 """
-    return base(cfg.get("nombre", "Evento"), cuerpo)
+    return base(cfg.get("nombre", "Evento"), cuerpo, avisos=avisos)
 
 
 def _bloque_asistencia(p: dict, cfg: dict) -> str:
@@ -482,11 +482,12 @@ def _bloque_equipo(p: dict, equipo: dict | None, companeros: list[dict]) -> str:
     pendientes = len(companeros) - len(dentro)
     chips = ""
     for m in dentro:
+        corona = "👑 " if m["id"] == equipo.get("capitan_id") else ""
         if m["id"] == p["id"]:
-            chips += f'<span class="chip yo">{e(nombre_corto(m))} (tú)</span>'
+            chips += f'<span class="chip yo">{corona}{e(nombre_corto(m))} (tú)</span>'
         else:
             chips += (f'<span class="chip" title="{e(m["nombre"])}">'
-                      f'{e(nombre_corto(m))}</span>')
+                      f'{corona}{e(nombre_corto(m))}</span>')
     chips += '<span class="chip incognita">?</span>' * pendientes
     descripcion = (f'<p class="silencio" style="margin:4px 0 10px">'
                    f'{e(equipo.get("descripcion"))}</p>'
@@ -575,7 +576,7 @@ function abrirPestana(nombre, btn){
     d.dentro.forEach(function(m){
       var s = document.createElement('span');
       s.className = 'chip' + (m.yo ? ' yo' : '');
-      s.textContent = m.n + (m.yo ? ' (t\\u00fa)' : '');
+      s.textContent = (m.cap ? '\\ud83d\\udc51 ' : '') + m.n + (m.yo ? ' (t\\u00fa)' : '');
       cont.appendChild(s);
     });
     for (var i = 0; i < d.pendientes; i++){
@@ -592,6 +593,15 @@ function abrirPestana(nombre, btn){
       .catch(function(){});
   }, 6000);
 })();
+(function(){
+  var zona = document.getElementById('zona-puntos');
+  if (!zona || !window.fetch || !window.RUTA_PUNTOS) return;
+  setInterval(function(){
+    fetch(RUTA_PUNTOS).then(function(r){ return r.text(); }).then(function(html){
+      zona.innerHTML = html;
+    }).catch(function(){});
+  }, 12000);
+})();
 """
 
 
@@ -600,6 +610,7 @@ def render_participante(cfg: dict, p: dict, equipo: dict | None,
                         lugares: list[dict], referencia: date,
                         lugar_escape: dict | None = None,
                         lugar_karts: dict | None = None,
+                        clasif: dict | None = None,
                         avisos=None) -> str:
     contador = cuenta_atras(cfg.get("fecha", ""), referencia)
     chip = f'<span class="fecha-chip">{e(contador)}</span>' if contador else ""
@@ -610,6 +621,26 @@ def render_participante(cfg: dict, p: dict, equipo: dict | None,
         '<div class="tarjeta"><p class="silencio" style="margin:0">Los lugares se '
         'publicarán aquí.</p></div>')
     ruta_equipo = f"/p/{p['token']}/equipo.json" if equipo else ""
+    ruta_puntos = f"/p/{p['token']}/puntos.html" if clasif else ""
+
+    # Pestaña de puntos: si es capitán, el formulario de la hora de salida
+    tarjeta_capitan = ""
+    if equipo and equipo.get("capitan_id") == p["id"]:
+        tarjeta_capitan = f"""
+<div class="tarjeta" style="border-color:var(--rojo)">
+  <h2>👑 Eres el capitán de tu equipo</h2>
+  <p class="silencio">Cuando salgáis de vuestra sala de la escape room, apunta
+  aquí la hora de salida: con ella se calculan los puntos del equipo.</p>
+  <form class="linea" method="post" action="/p/{e(p['token'])}/tiempo_escape">
+    <div><label>Hora de salida</label>
+      <input name="tiempo" value="{e(equipo.get('tiempo_escape'))}"
+             placeholder="10:05" size="8"></div>
+    <button class="boton" type="submit">Guardar</button>
+  </form>
+</div>"""
+    panel_puntos = (f'{tarjeta_capitan}<div class="tarjeta"><h2>🏆 Clasificación</h2>'
+                    f'<div id="zona-puntos">{fragmento_clasificacion(clasif)}</div>'
+                    f'</div>') if clasif else ""
 
     # Su sala de la escape room, si está sorteada
     aviso_sala = ""
@@ -668,8 +699,9 @@ def render_participante(cfg: dict, p: dict, equipo: dict | None,
 <p class="silencio">{e(cfg.get('descripcion'))}</p>
 {_bloque_asistencia(p, cfg)}
 <nav class="pestanas">
-  <button type="button" class="activa" onclick="abrirPestana('equipo', this)">🎽 Mi equipo</button>
+  <button type="button" class="activa" onclick="abrirPestana('equipo', this)">🎽 Equipo</button>
   <button type="button" onclick="abrirPestana('programa', this)">🗓️ Programa</button>
+  <button type="button" onclick="abrirPestana('puntos', this)">🏆 Puntos</button>
   <button type="button" onclick="abrirPestana('lugares', this)">📍 Lugares</button>
 </nav>
 <div class="panel-pestana activa" id="panel-equipo">
@@ -680,6 +712,9 @@ def render_participante(cfg: dict, p: dict, equipo: dict | None,
   {aviso_tanda}
   {_bloque_agenda(agenda)}
 </div>
+<div class="panel-pestana" id="panel-puntos">
+  {panel_puntos}
+</div>
 <div class="panel-pestana" id="panel-lugares">
   {panel_lugares}
 </div>
@@ -687,6 +722,7 @@ def render_participante(cfg: dict, p: dict, equipo: dict | None,
 <div class="pie">Nea Master · NeaEvento</div>
 <script>
 var RUTA_EQUIPO = {json.dumps(ruta_equipo)};
+var RUTA_PUNTOS = {json.dumps(ruta_puntos)};
 {GUION_PARTICIPANTE}
 </script>
 """
@@ -700,10 +736,131 @@ NAV_ADMIN = [
     ("/admin/participantes", "👥 Participantes"),
     ("/admin/equipos", "🎽 Equipos"),
     ("/admin/agenda", "🗓️ Agenda"),
+    ("/admin/puntos", "🏆 Puntos"),
     ("/admin/lugares", "📍 Lugares"),
     ("/admin/enlaces", "🔗 Enlaces"),
     ("/admin/evento", "⚙️ Evento"),
 ]
+
+
+def fragmento_clasificacion(clasif: dict) -> str:
+    """La clasificación (se usa igual en el panel y en el móvil, y se refresca sola)."""
+    tabla = clasif["equipos"]
+    hay_puntos = any(fila["total"] for fila in tabla)
+    medallas = ["🥇", "🥈", "🥉"]
+    filas = ""
+    for i, fila in enumerate(tabla):
+        eq = fila["equipo"]
+        puesto = medallas[i] if i < len(medallas) and hay_puntos else f"{i + 1}º"
+        filas += (f'<tr><td>{puesto}</td>'
+                  f'<td>{_simbolo_equipo(eq.get("color"), eq.get("emoji"))}'
+                  f'<strong>{e(eq["nombre"])}</strong></td>'
+                  f'<td>{fila["escape"]}</td><td>{fila["karts"]}</td>'
+                  f'<td><strong>{fila["total"]}</strong></td></tr>')
+    tabla_html = (f'<div class="envoltorio-tabla"><table class="tabla">'
+                  f'<tr><th></th><th>Equipo</th><th>🗝️ Escape</th><th>🏎️ Karts</th>'
+                  f'<th>Total</th></tr>{filas}</table></div>'
+                  if tabla else '<p class="silencio">Aún no hay equipos.</p>')
+
+    salidas = ""
+    for fila in clasif["escape"]:
+        if fila["tiempo"]:
+            eq = fila["equipo"]
+            salidas += (f'<div>{_simbolo_equipo(eq.get("color"), eq.get("emoji"))}'
+                        f'{e(eq["nombre"])} — salió a las {e(fila["tiempo"])}'
+                        f' → <strong>{fila["puntos"]} pt</strong></div>')
+    bloque_salidas = (f'<div class="etiqueta" style="margin-top:10px">Salidas de la '
+                      f'escape room</div>{salidas}' if salidas else "")
+
+    mejores = ""
+    for fila in clasif["karts"][:5]:
+        p = fila["participante"]
+        mejores += (f'<div>{e(nombre_corto(p))} — {e(fila["tiempo"])}'
+                    f' → <strong>{fila["puntos"]} pt</strong></div>')
+    bloque_karts = ""
+    if mejores:
+        bloque_karts = (f'<div class="etiqueta" style="margin-top:10px">Mejores vueltas '
+                        f'({clasif["n_corredores"]} pilotos con tiempo)</div>{mejores}')
+
+    aviso = ("" if hay_puntos else
+             '<p class="silencio">La clasificación se irá rellenando durante el día: '
+             'la salida de la escape room y las vueltas de los karts.</p>')
+    return (f'{tabla_html}{aviso}'
+            f'<p class="silencio" style="margin-top:10px">🏅 <strong>Gana el equipo '
+            f'con más puntos: medalla para todos sus miembros.</strong> Karts: el más '
+            f'rápido se lleva tantos puntos como pilotos, el último 1 — todas las '
+            f'posiciones cuentan.</p>'
+            f'{bloque_salidas}{bloque_karts}')
+
+
+def render_puntos(cfg: dict, clasif: dict, equipos: list[dict],
+                  participantes: list[dict], avisos=None, sin_password=False) -> str:
+    filas_escape = ""
+    for eq in equipos:
+        capitan = next((nombre_corto(p) for p in participantes
+                        if p["id"] == eq.get("capitan_id")), None)
+        nota_capitan = (f'<span class="silencio">capitán: 👑 {e(capitan)}</span>'
+                        if capitan else '<span class="silencio">sin capitán aún</span>')
+        filas_escape += f"""
+<div class="acciones" style="margin:6px 0">
+  <span style="min-width:130px">{_simbolo_equipo(eq.get('color'), eq.get('emoji'))}
+  <strong>{e(eq['nombre'])}</strong></span>
+  <input name="tiempo_{eq['id']}" value="{e(eq.get('tiempo_escape'))}"
+         placeholder="10:05" size="9">
+  {nota_capitan}
+</div>"""
+
+    filas_karts = ""
+    for eq in equipos + [None]:
+        grupo = [p for p in participantes
+                 if (p.get("equipo_id") == (eq["id"] if eq else None))]
+        if not grupo:
+            continue
+        titulo = (f'{_simbolo_equipo(eq.get("color"), eq.get("emoji"))}'
+                  f'<strong>{e(eq["nombre"])}</strong>' if eq
+                  else '<strong>Sin equipo</strong>')
+        filas_karts += f'<div class="etiqueta" style="margin-top:10px">{titulo}</div>'
+        for p in grupo:
+            filas_karts += (f'<div class="acciones" style="margin:4px 0">'
+                            f'<span style="min-width:130px">{e(nombre_corto(p))}'
+                            f'{" (t" + e(p["tanda"]) + ")" if (p.get("tanda") or "").strip() else ""}</span>'
+                            f'<input name="tiempo_{p["id"]}" '
+                            f'value="{e(p.get("tiempo_karts"))}" '
+                            f'placeholder="48.123" size="9"></div>')
+
+    cuerpo = f"""
+<div class="tarjeta">
+  <h2>🗝️ Escape room — hora de salida de cada sala</h2>
+  <p class="silencio">La mete el capitán desde su móvil (pestaña 🏆 Puntos de su
+  enlace), o tú aquí. Antes = mejor. Puntos por orden de salida:</p>
+  <form method="post" action="/admin/puntos/escape">
+    {filas_escape}
+    <div class="acciones" style="margin-top:8px">
+      <label style="margin:0">Puntos (1º, 2º, 3º…):</label>
+      <input name="puntos_escape" value="{e(cfg.get('puntos_escape'))}" size="10">
+      <button class="boton mini" type="submit">Guardar</button>
+    </div>
+  </form>
+</div>
+
+<div class="tarjeta">
+  <h2>🏎️ Karts — mejor vuelta de cada piloto</h2>
+  <p class="silencio">Formatos válidos: <code>48.123</code>, <code>48,3</code> o
+  <code>1:02.451</code>. Para los 2 finalistas cuenta su mejor tiempo de las dos
+  tandas. El más rápido se lleva tantos puntos como pilotos con tiempo; el último, 1.</p>
+  <form method="post" action="/admin/puntos/karts">
+    {filas_karts}
+    <div style="margin-top:10px"><button class="boton" type="submit">Guardar todos</button></div>
+  </form>
+</div>
+
+<div class="tarjeta">
+  <h2>🏆 Clasificación</h2>
+  {fragmento_clasificacion(clasif)}
+</div>
+"""
+    return pagina_admin("Puntos", "/admin/puntos", cuerpo, avisos=avisos,
+                        sin_password=sin_password)
 
 
 def _nav(ruta_actual: str, con_salir: bool) -> str:
@@ -1029,6 +1186,8 @@ def render_equipos(equipos: list[dict], miembros_por_equipo: dict[int, list[dict
               else m["nombre"])
             for m in miembros_por_equipo.get(eq["id"], [])
         )
+        capitan = next((nombre_corto(m) for m in miembros_por_equipo.get(eq["id"], [])
+                        if m["id"] == eq.get("capitan_id")), None)
         filas += f"""
 <div class="tarjeta">
   <form class="linea" method="post" action="/admin/equipos/{eq['id']}/guardar">
@@ -1045,6 +1204,7 @@ def render_equipos(equipos: list[dict], miembros_por_equipo: dict[int, list[dict
   </form>
   <p class="silencio" style="margin:8px 0 0"><strong>{eq['n_miembros']}</strong> miembro(s):
   {nombres or 'ninguno todavía'}</p>
+  {f'<p class="silencio" style="margin:4px 0 0">👑 Capitán: <strong>{e(capitan)}</strong></p>' if capitan else ''}
 </div>"""
 
     aviso_sorteo = (f'<p class="silencio">Hay <strong>{n_sin_equipo}</strong> '
@@ -1085,6 +1245,18 @@ def render_equipos(equipos: list[dict], miembros_por_equipo: dict[int, list[dict
   rol a partes iguales entre los equipos. Las reglas <strong>🔗 van juntos</strong>
   se respetan siempre. Las asignaciones hechas a mano se respetan si usas
   «Repartir a los que no tienen equipo».</p>
+</div>
+
+<div class="tarjeta">
+  <h2>👑 Capitanes</h2>
+  <form class="compacta" method="post" action="/admin/capitanes/sortear"
+        onsubmit="return confirm('Se sorteará un capitán por equipo (si ya había, se rehacen). ¿Seguir?')">
+    <button class="boton" type="submit">🎲 Sortear capitanes</button>
+  </form>
+  <p class="silencio" style="margin-bottom:0">Uno al azar por equipo. El capitán
+  sale con 👑 en su equipo y es quien apunta, desde su móvil, la hora de salida
+  de su sala de la escape room (pestaña 🏆 Puntos de su enlace). Hazlo después
+  del sorteo de equipos.</p>
 </div>
 
 {filas or '<p class="silencio">Aún no hay equipos.</p>'}

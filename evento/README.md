@@ -50,7 +50,15 @@ seguridad es copiar ese fichero.
    los que quedan fuera, a la 3ª — la final — junto a los mejores tiempos, que
    se ajustan a mano en la ficha de cada participante). Cada participante ve
    su sala y su tanda en su Programa.
-5. **🔗 Enlaces** — cada participante tiene su enlace personal. Repártelos con
+5. **🏆 Puntos** — el sistema de puntos del día: en **🎽 Equipos** se sortea
+   un **capitán** por equipo (👑), y ese capitán apunta desde su móvil la hora
+   de salida de su sala de la escape room. La escape reparte puntos por orden
+   de salida (editables; 20/10/5 por defecto) y en los karts cada piloto
+   puntúa por su mejor vuelta: el más rápido tantos puntos como pilotos, el
+   último 1 — todas las posiciones cuentan. La **clasificación en directo**
+   (escape + karts + total) la ve todo el mundo en la pestaña 🏆 de su enlace;
+   gana el equipo con más puntos (medalla para todos sus miembros).
+6. **🔗 Enlaces** — cada participante tiene su enlace personal. Repártelos con
    el botón de **WhatsApp** (mensaje ya escrito, plantilla editable), copiando
    uno a uno, o descargando el **CSV** para Excel/correo. En **📊 Resumen** ves
    quién abrió su enlace y quién confirmó.
