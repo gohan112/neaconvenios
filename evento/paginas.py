@@ -259,6 +259,10 @@ fieldset{border:0;margin:0;padding:0}
 .aviso.ok{background:var(--ok-fondo);border-color:var(--ok-borde)}
 .aviso.error{background:var(--error-fondo);border-color:var(--error-borde)}
 .aviso :last-child{margin-bottom:0}
+/* Aviso de una línea con su «Cambiar» al lado (asistencia ya respondida) */
+.linea-aviso{display:flex;gap:6px 12px;align-items:baseline;flex-wrap:wrap;
+             padding:9px 13px}
+.linea-aviso summary{margin:0;white-space:nowrap}
 
 /* Tablas */
 .tabla{width:100%;border-collapse:collapse;font-size:14.5px}
@@ -712,15 +716,16 @@ def _bloque_asistencia(p: dict, cfg: dict) -> str:
                   f'{boton_si} {boton_no}</form>')
     if p["confirmado"] == 1:
         return f"""
-<div class="aviso ok" style="padding:9px 13px">
-  <strong>Has confirmado tu asistencia.</strong> ¡Te esperamos!
-  <details><summary>Cambiar mi respuesta</summary>{formulario}</details>
+<div class="aviso ok linea-aviso">
+  <span>✅ <strong>Confirmado.</strong> ¡Te esperamos!</span>
+  <details><summary>Cambiar</summary>{formulario}</details>
 </div>"""
     if p["confirmado"] == -1:
         return f"""
-<div class="aviso" style="padding:9px 13px">😔 Has dicho que
-<strong>no puedes venir</strong>. Si cambias de planes, aquí te esperamos.
-<details><summary>Cambiar mi respuesta</summary>{formulario}</details></div>"""
+<div class="aviso linea-aviso">
+  <span>😔 Has dicho que <strong>no puedes venir</strong>.</span>
+  <details><summary>Cambiar</summary>{formulario}</details>
+</div>"""
     return f"""
 <div class="tarjeta destacada">
   <h2>¿Contamos contigo el {e(fecha_bonita(cfg.get('fecha', '')))}?</h2>
