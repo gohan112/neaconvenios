@@ -359,39 +359,64 @@ def crear_participante(nombre: str, telefono: str = "", email: str = "",
 def importar(filas: list[dict]) -> tuple[int, int]:
     """
     Importa participantes [{nombre, apodo, rol, telefono, email, equipo}]. Si el
-    equipo no existe se crea. Los nombres ya existentes (sin distinguir
-    mayúsculas) se omiten para poder re-importar la misma lista sin duplicar.
-    Devuelve (añadidos, omitidos).
+    equipo no existe se crea. Se puede re-importar la misma lista sin miedo:
+    a los nombres que ya existen (sin distinguir mayúsculas) NO se les duplica
+    ni se les machaca nada — solo se les rellenan los campos que tuvieran
+    vacíos (p. ej. si el Excel nuevo trae los correos). Su enlace no cambia.
+    Devuelve (añadidos, ya_existentes).
     """
     con = conexion()
     existentes = {
-        r["nombre"].strip().lower()
-        for r in con.execute("SELECT nombre FROM participantes")
+        r["nombre"].strip().lower(): dict(r)
+        for r in con.execute(
+            "SELECT id, nombre, apodo, rol, telefono, email, equipo_id "
+            "FROM participantes"
+        )
     }
-    nuevos = omitidos = 0
+    nuevos = repetidos = 0
     for fila in filas:
         nombre = (fila.get("nombre") or "").strip()
         if not nombre:
             continue
+        nombre_equipo = (fila.get("equipo") or "").strip()
         if nombre.lower() in existentes:
-            omitidos += 1
+            repetidos += 1
+            actual = existentes[nombre.lower()]
+            # Completar SOLO campos vacíos, sin tocar lo ya relleno
+            for campo in ("apodo", "rol", "telefono", "email"):
+                valor = (fila.get(campo) or "").strip()
+                if valor and not (actual.get(campo) or "").strip():
+                    con.execute(f"UPDATE participantes SET {campo} = ? WHERE id = ?",
+                                (valor, actual["id"]))
+                    actual[campo] = valor
+            if nombre_equipo and not actual.get("equipo_id"):
+                equipo_id = _buscar_o_crear_equipo(con, nombre_equipo)
+                con.execute("UPDATE participantes SET equipo_id = ?, "
+                            "revelado_en = NULL WHERE id = ?",
+                            (equipo_id, actual["id"]))
+                actual["equipo_id"] = equipo_id
             continue
         equipo_id = None
-        nombre_equipo = (fila.get("equipo") or "").strip()
         if nombre_equipo:
             equipo_id = _buscar_o_crear_equipo(con, nombre_equipo)
-        con.execute(
+        cur = con.execute(
             "INSERT INTO participantes (nombre, apodo, rol, telefono, email, "
             "equipo_id, token) VALUES (?, ?, ?, ?, ?, ?, ?)",
             (nombre, (fila.get("apodo") or "").strip(), (fila.get("rol") or "").strip(),
              (fila.get("telefono") or "").strip(),
              (fila.get("email") or "").strip(), equipo_id, _token_nuevo(con)),
         )
-        existentes.add(nombre.lower())
+        existentes[nombre.lower()] = {
+            "id": cur.lastrowid, "nombre": nombre,
+            "apodo": (fila.get("apodo") or "").strip(),
+            "rol": (fila.get("rol") or "").strip(),
+            "telefono": (fila.get("telefono") or "").strip(),
+            "email": (fila.get("email") or "").strip(), "equipo_id": equipo_id,
+        }
         nuevos += 1
     con.commit()
     con.close()
-    return nuevos, omitidos
+    return nuevos, repetidos
 
 
 def listar_participantes() -> list[dict]:

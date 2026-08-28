@@ -299,14 +299,15 @@ def admin_participantes_importar():
     except Exception as exc:  # noqa: BLE001 — mostrar el motivo, no tragarlo
         flash(f"No se pudo leer el fichero: {exc}", "error")
         return redirect("/admin/participantes")
-    nuevos, omitidos = db.importar(filas)
-    aviso = f"Importados {nuevos} participante(s)."
-    if omitidos:
-        aviso += f" Se omitieron {omitidos} que ya existían."
-    if not nuevos and not omitidos:
+    nuevos, existentes = db.importar(filas)
+    aviso = f"Importados {nuevos} participante(s) nuevo(s)."
+    if existentes:
+        aviso += (f" Otros {existentes} ya existían: se conservan tal cual "
+                  f"(solo se les rellenan los datos que tuvieran vacíos).")
+    if not nuevos and not existentes:
         aviso = ("No se encontró ningún nombre en el fichero. Comprueba que la primera "
                  "columna (o una columna «nombre») tiene los nombres.")
-    flash(aviso, "ok" if nuevos else "error")
+    flash(aviso, "ok" if (nuevos or existentes) else "error")
     return redirect("/admin/participantes")
 
 
@@ -326,10 +327,10 @@ def admin_participantes_pegar():
                 "apodo": "",
                 "rol": "",
             })
-    nuevos, omitidos = db.importar(filas)
+    nuevos, existentes = db.importar(filas)
     aviso = f"Añadidos {nuevos} participante(s)."
-    if omitidos:
-        aviso += f" Se omitieron {omitidos} que ya existían."
+    if existentes:
+        aviso += f" Otros {existentes} ya existían y se conservan tal cual."
     flash(aviso, "ok")
     return redirect("/admin/participantes")
 

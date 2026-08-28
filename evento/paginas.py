@@ -33,11 +33,12 @@ def e(valor) -> str:
 
 
 def nombre_corto(p: dict) -> str:
-    """Cómo llamar a la persona: su apodo si lo tiene, o su primer nombre."""
-    apodo = (p.get("apodo") or "").strip()
-    if apodo:
-        return apodo
-    return (p.get("nombre", "").split() or [""])[0]
+    """
+    Cómo llamar a la persona: su apodo si lo tiene, o su primer nombre.
+    Solo para mostrar: la primera letra siempre en mayúscula («pablo» → «Pablo»).
+    """
+    corto = (p.get("apodo") or "").strip() or (p.get("nombre", "").split() or [""])[0]
+    return corto[:1].upper() + corto[1:]
 
 
 def fecha_bonita(iso: str) -> str:
@@ -730,8 +731,10 @@ def render_participantes(lista: list[dict], equipos: list[dict],
       </div>
     </form>
   </details>
-  <p class="silencio" style="margin-bottom:0">Los nombres que ya existan se omiten:
-  puedes re-importar la misma lista sin duplicar.</p>
+  <p class="silencio" style="margin-bottom:0">Puedes re-importar la lista cuantas
+  veces quieras: a los nombres que ya existen no se les duplica ni se les cambia
+  nada — solo se les rellenan los datos que tuvieran vacíos (p. ej. si el Excel
+  nuevo trae los correos o teléfonos). Su enlace personal no cambia.</p>
 </div>
 
 <div class="tarjeta">
