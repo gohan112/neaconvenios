@@ -41,6 +41,16 @@ def nombre_corto(p: dict) -> str:
     return corto[:1].upper() + corto[1:]
 
 
+def lineas_historia(cfg: dict, n_equipos: int, n_participantes: int) -> list[str]:
+    """La historia que se cuenta antes del sorteo, una frase por línea."""
+    texto = cfg.get("historia") or ""
+    try:
+        texto = texto.format(equipos=n_equipos, participantes=n_participantes)
+    except (KeyError, IndexError, ValueError):
+        pass
+    return [linea.strip() for linea in texto.splitlines() if linea.strip()]
+
+
 def fecha_bonita(iso: str) -> str:
     try:
         d = date.fromisoformat((iso or "").strip())
@@ -169,6 +179,18 @@ details summary{cursor:pointer;color:var(--gris);font-size:14px;margin-top:8px}
 .regla-juntos{display:flex;align-items:center;gap:10px;flex-wrap:wrap;
               padding:8px 0;border-bottom:1px dashed var(--borde)}
 .regla-juntos:last-of-type{border-bottom:0}
+.pestanas{display:flex;gap:6px;margin:14px 0 2px}
+.pestanas button{flex:1;padding:9px 4px;border-radius:999px;
+                 border:1px solid var(--borde);background:#fff;font:inherit;
+                 font-size:14px;font-weight:600;color:var(--tinta);cursor:pointer}
+.pestanas button.activa{background:var(--rojo);border-color:var(--rojo);color:#fff}
+.panel-pestana{display:none}
+.panel-pestana.activa{display:block}
+.chip.incognita{opacity:.55;font-weight:700;letter-spacing:1px}
+.historia{margin:10px 0 0}
+.historia p{opacity:0;animation:aparece .7s ease forwards;margin:7px 0;font-size:17px}
+.aparece-tarde{opacity:0;animation:aparece .7s ease forwards}
+@keyframes aparece{to{opacity:1}}
 .sorteo-escena{text-align:center;padding:8px 0 4px}
 .caja-sorteo{width:200px;height:200px;margin:22px auto 10px;border-radius:28px;
              background:linear-gradient(150deg,#FFD766,#E8A013);padding:12px;
@@ -186,6 +208,8 @@ details summary{cursor:pointer;color:var(--gris);font-size:14px;margin-top:8px}
 .sorteo-resultado{display:none}
 .boton.gordo{font-size:18px;padding:14px 26px;border-radius:14px;
              animation:late 1.6s ease-out infinite}
+.boton.gordo.aparece-tarde{opacity:0;
+             animation:aparece .7s ease forwards, late 1.6s ease-out infinite}
 @keyframes late{0%{box-shadow:0 0 0 0 rgba(204,12,24,.45)}
                 70%{box-shadow:0 0 0 16px rgba(204,12,24,0)}
                 100%{box-shadow:0 0 0 0 rgba(204,12,24,0)}}
@@ -344,11 +368,13 @@ def render_no_encontrado(cfg: dict) -> str:
     return base("Enlace no válido", cuerpo)
 
 
-def render_sorteo(cfg: dict, p: dict, equipos: list[dict], indice_final: int) -> str:
+def render_sorteo(cfg: dict, p: dict, equipos: list[dict], indice_final: int,
+                  historia: list[str]) -> str:
     """
-    Pantalla del sorteo simulado (estilo caja de ítems de Mario): los colores de
-    los equipos van pasando por la caja cada vez más despacio y cae en el equipo
-    REAL del participante, que ya está asignado. Se enseña una sola vez.
+    Pantalla del sorteo simulado (estilo caja de ítems de Mario): primero se
+    cuenta la historia del evento frase a frase, y después los colores de los
+    equipos van pasando por la caja cada vez más despacio hasta caer en el
+    equipo REAL del participante, que ya está asignado. Se enseña una sola vez.
     """
     datos_equipos = [
         {"nombre": eq["nombre"], "color": eq.get("color") or "#CC0C18",
@@ -360,23 +386,35 @@ def render_sorteo(cfg: dict, p: dict, equipos: list[dict], indice_final: int) ->
     equipo_final = equipos[indice_final]
     nombre_pila = nombre_corto(p)
     ruta_revelado = f"/p/{p['token']}/revelado"
+
+    # La historia aparece frase a frase; la caja y el botón, al terminar
+    historia_html = ""
+    for i, linea in enumerate(historia):
+        historia_html += (f'<p style="animation-delay:{0.3 + i * 0.85:.2f}s">'
+                          f'{e(linea)}</p>')
+    retardo = 0.4 + len(historia) * 0.85
     cuerpo = f"""
 <div class="sorteo-escena">
   <h1>¡Hola, {e(nombre_pila)}! 👋</h1>
   <div class="silencio"><strong>{e(cfg.get('nombre'))}</strong> ·
   📅 {e(fecha_bonita(cfg.get('fecha', '')))}</div>
-  <p id="sorteo-intro">Los nombres de todos los participantes han entrado en el
-  sorteo de equipos…<br>¿Preparado/a para descubrir el tuyo?</p>
+  <div class="historia" id="sorteo-intro">{historia_html}</div>
 
-  <div class="caja-sorteo" id="caja-sorteo"><div class="baldosa" id="baldosa">?</div></div>
+  <div class="caja-sorteo aparece-tarde" id="caja-sorteo"
+       style="animation-delay:{retardo:.2f}s">
+    <div class="baldosa" id="baldosa">?</div>
+  </div>
   <div class="sorteo-equipo" id="sorteo-equipo"></div>
 
-  <button class="boton gordo" id="boton-sorteo" type="button">🎲 ¡Dale al sorteo!</button>
+  <button class="boton gordo aparece-tarde" id="boton-sorteo" type="button"
+          style="animation-delay:{retardo + 0.35:.2f}s">🎲 ¡Dale al sorteo!</button>
+  <div class="silencio aparece-tarde" style="animation-delay:{retardo + 0.5:.2f}s">
+  Sorteo aleatorio · en directo</div>
 
   <div class="sorteo-resultado" id="sorteo-resultado">
     <h2 style="font-size:22px">¡Estás en el equipo
     {e(equipo_final.get('emoji'))} {e(equipo_final['nombre'])}!</h2>
-    <a class="boton" href="/p/{e(p['token'])}">Ver mis compañeros y el programa →</a>
+    <a class="boton" href="/p/{e(p['token'])}">Ver mi equipo y el programa →</a>
   </div>
 
   <noscript>
@@ -420,6 +458,13 @@ Si cambias de planes, aquí te esperamos.
 </div>"""
 
 
+def _texto_contador(n_dentro: int, n_pendientes: int) -> str:
+    if n_pendientes > 0:
+        return (f"Ya estáis {n_dentro} de {n_dentro + n_pendientes} — el equipo se "
+                f"completa en directo según van pasando por el sorteo.")
+    return f"¡Equipo completo! Ya estáis los {n_dentro}."
+
+
 def _bloque_equipo(p: dict, equipo: dict | None, companeros: list[dict]) -> str:
     if not equipo:
         return """
@@ -431,12 +476,18 @@ def _bloque_equipo(p: dict, equipo: dict | None, companeros: list[dict]) -> str:
 </div>"""
     color = e(equipo.get("color") or "#CC0C18")
     emoji = e(equipo.get("emoji"))
+    # Solo se muestran los compañeros que YA pasaron por el sorteo; el resto
+    # son incógnitas que se van desvelando en directo (la página se refresca sola).
+    dentro = [m for m in companeros if m.get("revelado_en")]
+    pendientes = len(companeros) - len(dentro)
     chips = ""
-    for m in companeros:
+    for m in dentro:
         if m["id"] == p["id"]:
             chips += f'<span class="chip yo">{e(nombre_corto(m))} (tú)</span>'
         else:
-            chips += f'<span class="chip" title="{e(m["nombre"])}">{e(nombre_corto(m))}</span>'
+            chips += (f'<span class="chip" title="{e(m["nombre"])}">'
+                      f'{e(nombre_corto(m))}</span>')
+    chips += '<span class="chip incognita">?</span>' * pendientes
     descripcion = (f'<p class="silencio" style="margin:4px 0 10px">'
                    f'{e(equipo.get("descripcion"))}</p>'
                    if equipo.get("descripcion") else "")
@@ -446,9 +497,10 @@ def _bloque_equipo(p: dict, equipo: dict | None, companeros: list[dict]) -> str:
   <div class="etiqueta">Tu equipo</div>
   <div class="equipo-nombre">{emoji} {e(equipo['nombre'])}</div>
   {descripcion}
-  <div class="etiqueta" style="margin-top:10px">Compañeros de equipo
-  ({len(companeros)})</div>
-  <div>{chips or '<span class="silencio">De momento estás tú.</span>'}</div>
+  <div class="etiqueta" style="margin-top:10px">El equipo</div>
+  <div id="chips-equipo">{chips}</div>
+  <p class="silencio" id="contador-equipo" style="margin:8px 0 0">
+  {e(_texto_contador(len(dentro), pendientes))}</p>
 </div>"""
 
 
@@ -507,6 +559,42 @@ def _bloque_lugares(lugares: list[dict]) -> str:
     return f'<div class="tarjeta"><h2>📍 Lugares</h2>{tarjetas}</div>'
 
 
+GUION_PARTICIPANTE = """
+function abrirPestana(nombre, btn){
+  document.querySelectorAll('.panel-pestana').forEach(function(x){ x.classList.remove('activa'); });
+  document.querySelectorAll('.pestanas button').forEach(function(b){ b.classList.remove('activa'); });
+  var panel = document.getElementById('panel-' + nombre);
+  if (panel) panel.classList.add('activa');
+  btn.classList.add('activa');
+}
+(function(){
+  var cont = document.getElementById('chips-equipo');
+  if (!cont || !window.fetch || !window.RUTA_EQUIPO) return;
+  function pinta(d){
+    cont.textContent = '';
+    d.dentro.forEach(function(m){
+      var s = document.createElement('span');
+      s.className = 'chip' + (m.yo ? ' yo' : '');
+      s.textContent = m.n + (m.yo ? ' (t\\u00fa)' : '');
+      cont.appendChild(s);
+    });
+    for (var i = 0; i < d.pendientes; i++){
+      var q = document.createElement('span');
+      q.className = 'chip incognita';
+      q.textContent = '?';
+      cont.appendChild(q);
+    }
+    var c = document.getElementById('contador-equipo');
+    if (c) c.textContent = d.texto;
+  }
+  setInterval(function(){
+    fetch(RUTA_EQUIPO).then(function(r){ return r.json(); }).then(pinta)
+      .catch(function(){});
+  }, 6000);
+})();
+"""
+
+
 def render_participante(cfg: dict, p: dict, equipo: dict | None,
                         companeros: list[dict], agenda: list[dict],
                         lugares: list[dict], referencia: date,
@@ -516,6 +604,10 @@ def render_participante(cfg: dict, p: dict, equipo: dict | None,
     contacto = (f'<div class="pie">¿Dudas? Contacta con {e(cfg.get("contacto"))}</div>'
                 if cfg.get("contacto") else "")
     nombre_pila = nombre_corto(p)
+    panel_lugares = _bloque_lugares(lugares) or (
+        '<div class="tarjeta"><p class="silencio" style="margin:0">Los lugares se '
+        'publicarán aquí.</p></div>')
+    ruta_equipo = f"/p/{p['token']}/equipo.json" if equipo else ""
     cuerpo = f"""
 <h1>¡Hola, {e(nombre_pila)}! 👋</h1>
 <div class="silencio"><strong>{e(cfg.get('nombre'))}</strong><br>
@@ -523,11 +615,26 @@ def render_participante(cfg: dict, p: dict, equipo: dict | None,
 {chip}
 <p class="silencio">{e(cfg.get('descripcion'))}</p>
 {_bloque_asistencia(p, cfg)}
-{_bloque_equipo(p, equipo, companeros)}
-{_bloque_agenda(agenda)}
-{_bloque_lugares(lugares)}
+<nav class="pestanas">
+  <button type="button" class="activa" onclick="abrirPestana('equipo', this)">🎽 Mi equipo</button>
+  <button type="button" onclick="abrirPestana('programa', this)">🗓️ Programa</button>
+  <button type="button" onclick="abrirPestana('lugares', this)">📍 Lugares</button>
+</nav>
+<div class="panel-pestana activa" id="panel-equipo">
+  {_bloque_equipo(p, equipo, companeros)}
+</div>
+<div class="panel-pestana" id="panel-programa">
+  {_bloque_agenda(agenda)}
+</div>
+<div class="panel-pestana" id="panel-lugares">
+  {panel_lugares}
+</div>
 {contacto}
 <div class="pie">Nea Master · NeaEvento</div>
+<script>
+var RUTA_EQUIPO = {json.dumps(ruta_equipo)};
+{GUION_PARTICIPANTE}
+</script>
 """
     return base(cfg.get("nombre", "Evento"), cuerpo, avisos=avisos)
 
@@ -1147,6 +1254,9 @@ def render_evento(cfg: dict, avisos=None, sin_password=False) -> str:
     </div>
     <label>Mensaje de bienvenida (lo ven los participantes)</label>
     <textarea name="descripcion" rows="3" style="width:100%">{e(cfg.get('descripcion'))}</textarea>
+    <label>Historia que se cuenta antes del sorteo (una frase por línea; puedes
+    usar {{equipos}} y {{participantes}}, que se cambian por los números reales)</label>
+    <textarea name="historia" rows="6" style="width:100%">{e(cfg.get('historia'))}</textarea>
     <label>Contacto de la organización (nombre y teléfono; sale al pie de la página)</label>
     <input name="contacto" value="{e(cfg.get('contacto'))}" style="width:100%"
            placeholder="Borja (600 111 222)">

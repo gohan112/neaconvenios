@@ -124,8 +124,13 @@ def ver_participante(token: str):
         indice = next((i for i, eq in enumerate(equipos)
                        if eq["id"] == p["equipo_id"]), None)
         if indice is not None:
-            return paginas.render_sorteo(cfg=db.leer_config(), p=p,
-                                         equipos=equipos, indice_final=indice)
+            cfg = db.leer_config()
+            datos = db.resumen()
+            historia = paginas.lineas_historia(
+                cfg, n_equipos=datos["equipos"],
+                n_participantes=datos["participantes"])
+            return paginas.render_sorteo(cfg=cfg, p=p, equipos=equipos,
+                                         indice_final=indice, historia=historia)
 
     equipo = db.equipo(p["equipo_id"]) if p["equipo_id"] else None
     companeros = db.miembros(p["equipo_id"]) if p["equipo_id"] else []
@@ -134,6 +139,20 @@ def ver_participante(token: str):
         agenda=db.agenda_para(p["equipo_id"]), lugares=db.listar_lugares(),
         referencia=db.hoy(), avisos=_avisos(),
     )
+
+
+@app.get("/p/<token>/equipo.json")
+def equipo_json(token: str):
+    """Estado del equipo del participante, para refrescar «Mi equipo» en directo."""
+    p = db.participante_por_token(token)
+    if not p or not p["equipo_id"]:
+        abort(404)
+    miembros = db.miembros(p["equipo_id"])
+    dentro = [{"n": paginas.nombre_corto(m), "yo": m["id"] == p["id"]}
+              for m in miembros if m.get("revelado_en")]
+    pendientes = len(miembros) - len(dentro)
+    return jsonify(dentro=dentro, pendientes=pendientes,
+                   texto=paginas._texto_contador(len(dentro), pendientes))
 
 
 @app.post("/p/<token>/revelado")
@@ -666,6 +685,7 @@ def admin_evento_guardar():
         "fecha": request.form.get("fecha", ""),
         "hora": request.form.get("hora", ""),
         "descripcion": request.form.get("descripcion", ""),
+        "historia": request.form.get("historia", ""),
         "contacto": request.form.get("contacto", ""),
         "url_base": (request.form.get("url_base", "") or "").rstrip("/"),
         "msg_whatsapp": request.form.get("msg_whatsapp", ""),

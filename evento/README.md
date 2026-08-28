@@ -2,13 +2,17 @@
 
 App web para organizar el evento de empresa. Cada participante recibe un
 **enlace personal**; al abrirlo queda «activado», su nombre ya aparece escrito
-y, la primera vez, ve la **animación del sorteo** (una caja estilo «ítem de
-Mario» por la que van pasando los colores de los equipos cada vez más despacio
-hasta caer en el suyo — el equipo real ya asignado por la organización: el
-sorteo es solo el espectáculo). Después ve **su equipo y sus compañeros, el
-programa del día (calendario) y los lugares** con botón de «cómo llegar», y
-puede **confirmar su asistencia**. La organización lo gestiona todo desde un
-panel: participantes, equipos con **sorteo automático equilibrado**, agenda,
+y, la primera vez, ve la **historia del evento** (frase a frase: «se celebra la
+Olimpiada Nea Master, N equipos se juegan la victoria… el sorteo es aleatorio…
+¡pasemos al sorteo!» — texto editable desde el panel) y la **animación del
+sorteo**: una caja estilo «ítem de Mario» por la que van pasando los colores de
+los equipos cada vez más despacio hasta caer en el suyo — el equipo real ya
+asignado por la organización: el sorteo es el espectáculo. Después su página
+tiene tres pestañas: **🎽 Mi equipo** (los compañeros van apareciendo EN
+DIRECTO según pasan por el sorteo; los que faltan son incógnitas «?»), **🗓️
+Programa** y **📍 Lugares** con botón de «cómo llegar»; y puede **confirmar su
+asistencia**. La organización lo gestiona todo desde un panel: participantes,
+equipos con **sorteo automático equilibrado** y reglas de «van juntos», agenda,
 lugares y reparto de enlaces (copiar, WhatsApp o CSV).
 
 Es una app independiente de NeaConvenios: Python + Flask + SQLite, sin más.

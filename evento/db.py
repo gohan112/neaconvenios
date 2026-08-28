@@ -31,11 +31,18 @@ RUTA_DB = os.environ.get("EVENTO_DB_PATH") or os.path.join(
 PALETA = ["#CC0C18", "#1D6FB8", "#1E9E5A", "#E8A013", "#7B3FA0", "#0F9BA8", "#D3559C", "#5A6B7A"]
 
 CONFIG_DEFECTO = {
-    "nombre": "Evento del día 12",
+    "nombre": "Olimpiada Nea Master",
     "fecha": "2026-09-12",
     "hora": "09:00",
-    "descripcion": "¡Bienvenido/a! Aquí tienes tu equipo, el programa del día y los "
-                   "lugares. Confirma tu asistencia más abajo.",
+    "descripcion": "¡Bienvenido/a a la Olimpiada! Aquí tienes tu equipo, el programa "
+                   "del día y los lugares. Confirma tu asistencia más abajo.",
+    # La historia que se cuenta antes del sorteo (una frase por línea).
+    # Admite {equipos} y {participantes}, que se sustituyen por los números reales.
+    "historia": "🏅 Se celebra la OLIMPIADA NEA MASTER.\n"
+                "{equipos} equipos se juegan la victoria. Solo uno pasará a la historia.\n"
+                "Los nombres de los {participantes} participantes ya están en el bombo.\n"
+                "El sorteo es totalmente aleatorio: nadie sabe dónde caerá cada uno…\n"
+                "¡Pasemos al sorteo!",
     "url_base": "",
     "contacto": "",
     "msg_whatsapp": "¡Hola, {nombre}! Este es tu enlace personal para el evento: {enlace}\n"
@@ -255,8 +262,9 @@ def equipo(equipo_id: int) -> dict | None:
 def miembros(equipo_id: int) -> list[dict]:
     con = conexion()
     filas = con.execute(
-        "SELECT id, nombre, apodo, rol FROM participantes WHERE equipo_id = ? "
-        "ORDER BY nombre COLLATE NOCASE",
+        "SELECT id, nombre, apodo, rol, revelado_en FROM participantes "
+        "WHERE equipo_id = ? ORDER BY revelado_en IS NULL, revelado_en, "
+        "nombre COLLATE NOCASE",
         (equipo_id,),
     ).fetchall()
     con.close()
