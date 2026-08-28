@@ -25,7 +25,7 @@ from functools import wraps
 from urllib.parse import quote
 
 from flask import (Flask, Response, abort, flash, get_flashed_messages, jsonify,
-                   redirect, request, session)
+                   redirect, request, send_file, session)
 
 import db
 import paginas
@@ -775,6 +775,67 @@ def admin_evento_guardar():
     })
     flash("Datos del evento guardados.", "ok")
     return redirect("/admin/evento")
+
+
+# ================================================================== copia de seguridad
+
+@app.get("/admin/copia.db")
+@requiere_admin
+def admin_copia():
+    """Descarga el evento entero (un único fichero SQLite)."""
+    con = db.conexion()
+    con.execute("PRAGMA wal_checkpoint(TRUNCATE)")  # volcar el WAL al fichero
+    con.close()
+    nombre = f"evento_copia_{db.hoy().strftime('%Y%m%d')}.db"
+    return send_file(db.RUTA_DB, as_attachment=True, download_name=nombre,
+                     mimetype="application/octet-stream")
+
+
+@app.post("/admin/restaurar")
+@requiere_admin
+def admin_restaurar():
+    """Sustituye el evento por una copia .db subida (validándola antes)."""
+    fichero = request.files.get("fichero")
+    if not fichero or not fichero.filename:
+        flash("Elige el fichero .db de la copia.", "error")
+        return redirect("/admin/evento")
+    datos = fichero.read()
+    if not datos.startswith(b"SQLite format 3\x00"):
+        flash("Ese fichero no es una copia de NeaEvento (.db).", "error")
+        return redirect("/admin/evento")
+    # Comprobar que abre y que tiene las tablas de la app
+    import sqlite3 as _sqlite3
+    import tempfile as _tempfile
+    with _tempfile.NamedTemporaryFile(delete=False, suffix=".db") as tmp:
+        tmp.write(datos)
+        ruta_tmp = tmp.name
+    try:
+        con = _sqlite3.connect(ruta_tmp)
+        tablas = {f[0] for f in con.execute(
+            "SELECT name FROM sqlite_master WHERE type='table'")}
+        con.close()
+        if not {"config", "participantes", "equipos"} <= tablas:
+            flash("El fichero no contiene los datos de un evento.", "error")
+            return redirect("/admin/evento")
+    except _sqlite3.Error:
+        flash("No se pudo leer el fichero: no parece una copia válida.", "error")
+        return redirect("/admin/evento")
+    finally:
+        os.unlink(ruta_tmp)
+    # Sustituir la base de datos (y limpiar los ficheros auxiliares del WAL)
+    for sufijo in ("-wal", "-shm"):
+        try:
+            os.unlink(db.RUTA_DB + sufijo)
+        except FileNotFoundError:
+            pass
+    with open(db.RUTA_DB, "wb") as destino:
+        destino.write(datos)
+    db.iniciar()  # aplicar migraciones/claves que falten a la copia
+    datos_resumen = db.resumen()
+    flash(f"Copia restaurada: {datos_resumen['participantes']} participante(s), "
+          f"{datos_resumen['equipos']} equipo(s), "
+          f"{datos_resumen['actividades']} actividad(es).", "ok")
+    return redirect("/admin")
 
 
 # ================================================================== arranque

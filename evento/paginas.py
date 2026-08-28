@@ -1447,6 +1447,22 @@ def render_evento(cfg: dict, avisos=None, sin_password=False) -> str:
     </div>
   </form>
 </div>
+
+<div class="tarjeta" style="max-width:640px">
+  <h2>💾 Copia de seguridad</h2>
+  <p class="silencio">Todo el evento (participantes con sus enlaces, equipos,
+  reglas, salas, tandas, agenda y lugares) vive en un único fichero. Descárgalo
+  de vez en cuando; restaurarlo lo deja todo exactamente como estaba.</p>
+  <div class="acciones">
+    <a class="boton secundario" href="/admin/copia.db">⬇️ Descargar copia</a>
+    <form class="compacta" method="post" action="/admin/restaurar"
+          enctype="multipart/form-data"
+          onsubmit="return confirm('Se SUSTITUIRÁ todo el evento actual por la copia. ¿Seguir?')">
+      <input type="file" name="fichero" accept=".db" required>
+      <button class="boton secundario" type="submit">♻ Restaurar copia</button>
+    </form>
+  </div>
+</div>
 """
     return pagina_admin("Evento", "/admin/evento", cuerpo, avisos=avisos,
                         sin_password=sin_password)
