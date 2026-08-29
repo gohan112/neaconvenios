@@ -261,6 +261,18 @@ def salud():
     return jsonify(ok=True)
 
 
+@app.after_request
+def sin_guardar_en_cache(respuesta):
+    """El móvil tiene que ver siempre lo de ahora, no una copia guardada.
+
+    Sin esto, el navegador (o el visor de enlaces de WhatsApp) puede enseñar
+    una página vieja: dices «¡Sí, voy!» y sigues viendo el botón, o el equipo
+    y la clasificación se quedan a medias. Los ficheros de /assets no entran:
+    Flask ya les pone sus propias cabeceras."""
+    respuesta.headers.setdefault("Cache-Control", "no-store, max-age=0")
+    return respuesta
+
+
 # ================================================================== admin: sesión
 
 @app.route("/admin/entrar", methods=["GET", "POST"])

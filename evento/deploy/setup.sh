@@ -8,16 +8,16 @@ APP_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$APP_DIR"
 echo ">> Instalando NeaEvento en: $APP_DIR"
 
-echo ">> 1/4 Paquetes del sistema…"
+echo ">> 1/5 Paquetes del sistema…"
 sudo apt-get update -y
 sudo DEBIAN_FRONTEND=noninteractive apt-get install -y python3-venv python3-pip
 
-echo ">> 2/4 Entorno Python y dependencias…"
+echo ">> 2/5 Entorno Python y dependencias…"
 python3 -m venv venv
 ./venv/bin/pip install --upgrade pip
 ./venv/bin/pip install -r requirements.txt
 
-echo ">> 3/4 Contraseña del panel…"
+echo ">> 3/5 Contraseña del panel…"
 PASS_NUEVA=""
 if [ ! -f /etc/neaevento.env ] || ! sudo grep -q '^EVENTO_ADMIN_PASSWORD=..*' /etc/neaevento.env; then
   # Se genera una contraseña aleatoria y se enseña al final (apúntala)
@@ -26,7 +26,7 @@ if [ ! -f /etc/neaevento.env ] || ! sudo grep -q '^EVENTO_ADMIN_PASSWORD=..*' /e
   sudo chmod 600 /etc/neaevento.env
 fi
 
-echo ">> 4/4 Servicio del sistema (arranque automático)…"
+echo ">> 4/5 Servicio del sistema (arranque automático)…"
 sudo tee /etc/systemd/system/neaevento.service >/dev/null <<SERVICE
 [Unit]
 Description=NeaEvento
@@ -47,6 +47,37 @@ sudo systemctl daemon-reload
 sudo systemctl enable --now neaevento
 sleep 3
 sudo systemctl --no-pager status neaevento | head -5 || true
+
+echo ">> 5/5 Actualización automática desde GitHub…"
+# Cada 5 minutos mira si hay versión nueva; solo reinicia si las pruebas pasan.
+# Para desactivarla:  sudo systemctl disable --now neaevento-update.timer
+sudo tee /etc/systemd/system/neaevento-update.service >/dev/null <<UPDATE
+[Unit]
+Description=NeaEvento: traer la ultima version de GitHub
+After=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=$APP_DIR
+ExecStart=/bin/bash $APP_DIR/deploy/autoactualizar.sh
+User=$(whoami)
+UPDATE
+
+sudo tee /etc/systemd/system/neaevento-update.timer >/dev/null <<TIMER
+[Unit]
+Description=NeaEvento: comprobar cada 5 min si hay version nueva
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=5min
+Unit=neaevento-update.service
+
+[Install]
+WantedBy=timers.target
+TIMER
+
+sudo systemctl daemon-reload
+sudo systemctl enable --now neaevento-update.timer
 
 # IP pública IPv4. Se pregunta primero a los metadatos de la propia instancia
 # (dentro de AWS es lo fiable); si no, a un servicio externo forzando IPv4 con
@@ -80,6 +111,9 @@ if [ -n "$PASS_NUEVA" ]; then
 else
   echo "  Contraseña del panel:   la de siempre (está en /etc/neaevento.env)"
 fi
+echo ""
+echo "  Se actualiza sola: cada 5 min busca versión nueva en GitHub y solo"
+echo "  reinicia si las pruebas pasan (journalctl -u neaevento-update)."
 echo ""
 echo "  Te quedan solo 2 pasos:"
 echo "   1) En la web de Lightsail: instancia -> pestaña «Networking» ->"

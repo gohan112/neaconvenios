@@ -184,6 +184,13 @@ r = c.post(f"/p/{capitan['token']}/tiempo_escape", data={"tiempo": "no es una ho
            follow_redirects=True)
 ok("no se entiende" in r.text, "una hora mal escrita se rechaza con un aviso")
 
+r = c.get(f"/p/{capitan['token']}")
+ok("no-store" in r.headers.get("Cache-Control", ""),
+   "la página no se guarda en caché (el móvil ve siempre lo de ahora)")
+r = c.get("/assets/neamaster_horizontal.png")
+ok(r.status_code == 200 and "no-store" not in r.headers.get("Cache-Control", ""),
+   "pero el logo sí se puede guardar (no se descarga cada vez)")
+
 r = c.get(f"/p/{capitan['token']}/equipo.json")
 ok(r.status_code == 200 and r.json["dentro"], "el equipo se puede consultar en directo")
 ok(c.get("/p/inventado").status_code == 404, "un enlace inventado no existe")
