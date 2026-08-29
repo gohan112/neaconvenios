@@ -67,6 +67,13 @@ seguridad es copiar ese fichero.
    **clasificación en directo** (escape + karts + total) la ve todo el mundo
    en la pestaña 🏆 de su enlace;
    gana el equipo con más puntos (medalla para todos sus miembros).
+   Cada uno tiene ahí mismo el **tutorial**: cómo se reparten los puntos y qué
+   le toca hacer a él (su vuelta; la hora de salida, solo el capitán), y en su
+   Programa se le recuerda al lado de cada cita.
+   Cuando acabe todo, con **🏁 Cerrar la Olimpiada** se publica el resultado: a
+   los del equipo ganador y a la vuelta rápida del día les sale una
+   felicitación con el aviso de **recoger el premio en los postres**; al resto,
+   el resultado final. Se puede retirar si se publicó antes de tiempo.
 6. **🔗 Enlaces** — cada participante tiene su enlace personal. Repártelos con
    el botón de **WhatsApp** (mensaje ya escrito, plantilla editable), copiando
    uno a uno, o descargando el **CSV** para Excel/correo. En **📊 Resumen** ves

@@ -703,8 +703,26 @@ def clasificacion() -> dict:
         tabla.append({"equipo": eq, "escape": pts_escape, "karts": pts_karts,
                       "total": pts_escape + pts_karts})
     tabla.sort(key=lambda fila: -fila["total"])
+    # Pilotos que van a correr (para explicar los puntos: el primero se lleva
+    # tantos como pilotos). Si aún no hay tandas, son todos los participantes.
+    con_tanda = sum(1 for p in participantes_ if (p.get("tanda") or "").strip())
     return {"escape": escape, "karts": karts, "equipos": tabla,
-            "n_corredores": n}
+            "n_corredores": n, "n_pilotos": con_tanda or len(participantes_)}
+
+
+def ganadores(clasif: dict) -> dict:
+    """Quién se lleva premio: el equipo con más puntos y la vuelta rápida del día.
+
+    Se usa al cerrar la Olimpiada para felicitar a cada uno desde su enlace. Si
+    hay empate arriba (o dos vueltas idénticas), salen todos: nadie se queda
+    fuera de su medalla por un desempate inventado."""
+    tabla = [f for f in clasif.get("equipos", []) if f["total"] > 0]
+    mejor = max((f["total"] for f in tabla), default=0)
+    equipos_ = [f["equipo"] for f in tabla if f["total"] == mejor] if mejor else []
+    karts = clasif.get("karts") or []
+    tiempo = karts[0]["tiempo"] if karts else ""
+    pilotos = [f["participante"] for f in karts if f["tiempo"] == tiempo] if tiempo else []
+    return {"equipos": equipos_, "puntos": mejor, "pilotos": pilotos, "tiempo": tiempo}
 
 
 def parsear_salas(texto: str) -> list[dict]:

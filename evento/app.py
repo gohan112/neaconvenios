@@ -147,13 +147,16 @@ def ver_participante(token: str):
     lugar_escape = db.lugar(id_lugar_escape) if id_lugar_escape else None
     id_lugar_karts = _entero_o_none(cfg.get("karts_lugar_id"))
     lugar_karts = db.lugar(id_lugar_karts) if id_lugar_karts else None
+    clasif = db.clasificacion()
+    # Al cerrar la Olimpiada, cada uno ve si tiene premio nada más entrar
+    premios = db.ganadores(clasif) if (cfg.get("resultado_final") or "").strip() else None
     return paginas.render_participante(
         cfg=cfg, p=p, equipo=equipo, companeros=companeros,
         agenda=db.agenda_para(p["equipo_id"]), lugares=db.listar_lugares(),
         referencia=db.hoy(), lugar_escape=lugar_escape,
-        lugar_karts=lugar_karts, clasif=db.clasificacion(),
+        lugar_karts=lugar_karts, clasif=clasif,
         hora_actual=_hora_si_es_hoy(cfg), corre_final=db.corre_la_final(p),
-        avisos=_avisos(),
+        ganadores=premios, avisos=_avisos(),
     )
 
 
@@ -200,7 +203,7 @@ def puntos_fragmento(token: str):
     p = db.participante_por_token(token)
     if not p:
         abort(404)
-    return paginas.fragmento_clasificacion(db.clasificacion())
+    return paginas.fragmento_clasificacion(db.clasificacion(), nota=False)
 
 
 @app.post("/p/<token>/tiempo_karts")
@@ -793,8 +796,9 @@ def admin_lugar_borrar(lugar_id: int):
 @app.get("/admin/puntos")
 @requiere_admin
 def admin_puntos():
+    clasif = db.clasificacion()
     return paginas.render_puntos(
-        cfg=db.leer_config(), clasif=db.clasificacion(),
+        cfg=db.leer_config(), clasif=clasif, ganadores=db.ganadores(clasif),
         equipos=db.listar_equipos(), participantes=db.listar_participantes(),
         avisos=_avisos(), sin_password=_sin_password(),
     )
@@ -825,6 +829,22 @@ def admin_puntos_karts():
             db.poner_tiempo_karts(p["id"], request.form.get(campo_final, ""), final=True)
         db.marcar_finalista(p["id"], str(p["id"]) in finalistas)
     flash("Tiempos de karts guardados.", "ok")
+    return redirect("/admin/puntos")
+
+
+@app.post("/admin/puntos/final")
+@requiere_admin
+def admin_puntos_final():
+    """Cierra (o reabre) la Olimpiada: la felicitación a los ganadores."""
+    cerrar = request.form.get("valor") == "1"
+    db.guardar_config({"resultado_final": "1" if cerrar else ""})
+    if cerrar:
+        premios = db.ganadores(db.clasificacion())
+        nombres = ", ".join(x["nombre"] for x in premios["equipos"]) or "nadie todavía"
+        flash(f"¡Resultado publicado! Gana {nombres}. Cada uno lo ve al abrir su "
+              f"enlace, con el aviso de recoger el premio en los postres.", "ok")
+    else:
+        flash("Resultado retirado: se deja de felicitar a nadie.", "ok")
     return redirect("/admin/puntos")
 
 

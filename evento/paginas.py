@@ -442,6 +442,12 @@ details summary:hover{color:var(--rojo)}
 @keyframes late{0%{box-shadow:0 0 0 0 rgba(204,12,24,.45)}
                 70%{box-shadow:0 0 0 16px rgba(204,12,24,0)}
                 100%{box-shadow:0 0 0 0 rgba(204,12,24,0)}}
+.celebracion{text-align:center;background:linear-gradient(180deg,
+             rgba(232,160,19,.14),transparent 70%)}
+.celebracion h2{margin:0 0 var(--e2);font-size:26px}
+.celebracion .medallon{font-size:52px;line-height:1;margin-bottom:6px}
+.celebracion p{margin:0 0 var(--e2)}
+.celebracion p:last-child{margin-bottom:0}
 .confeti{position:fixed;top:42%;left:50%;width:12px;height:12px;border-radius:3px;
          pointer-events:none;z-index:50;animation:vuela 1.2s ease-out forwards}
 @keyframes vuela{to{transform:translate(var(--dx),var(--dy)) rotate(720deg);opacity:0}}
@@ -986,6 +992,25 @@ function abrirPestana(nombre, btn){
   }, 6000);
 })();
 
+// --- Confeti para quien tiene premio (una vez, y solo si no pidió menos
+// movimiento: la felicitación se lee igual sin él)
+(function(){
+  if (!window.COLOR_PREMIO) return;
+  try {
+    if (window.matchMedia &&
+        matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  } catch (e) {}
+  for (var i = 0; i < 40; i++){
+    var s = document.createElement('span');
+    s.className = 'confeti';
+    s.style.background = (i % 3 === 0) ? '#E8A013' : COLOR_PREMIO;
+    s.style.setProperty('--dx', (Math.random() * 360 - 180) + 'px');
+    s.style.setProperty('--dy', (Math.random() * -340 - 60) + 'px');
+    document.body.appendChild(s);
+    (function(el){ setTimeout(function(){ el.remove(); }, 1400); })(s);
+  }
+})();
+
 // --- La clasificación también se refresca sola
 (function(){
   var zona = document.getElementById('zona-puntos');
@@ -1036,6 +1061,7 @@ def render_participante(cfg: dict, p: dict, equipo: dict | None,
                         clasif: dict | None = None,
                         hora_actual: str | None = None,
                         corre_final: bool = False,
+                        ganadores: dict | None = None,
                         avisos=None) -> str:
     contador = cuenta_atras(cfg.get("fecha", ""), referencia)
     chip = f'<span class="fecha-chip">{e(contador)}</span>' if contador else ""
@@ -1058,8 +1084,9 @@ def render_participante(cfg: dict, p: dict, equipo: dict | None,
                   if p["confirmado"] == 0 and cfg.get("descripcion") else "")
 
     # Pestaña de puntos: si es capitán, el formulario de la hora de salida
+    es_capitan = bool(equipo and equipo.get("capitan_id") == p["id"])
     tarjeta_capitan = ""
-    if equipo and equipo.get("capitan_id") == p["id"]:
+    if es_capitan:
         tarjeta_capitan = f"""
 <div class="tarjeta destacada">
   <h2>👑 Eres el capitán de tu equipo</h2>
@@ -1103,11 +1130,59 @@ def render_participante(cfg: dict, p: dict, equipo: dict | None,
   {campos}{nota_final}
 </div>"""
 
-    panel_puntos = (f'{tarjeta_capitan}{tarjeta_vuelta}'
+    # Tutorial: cómo se reparten los puntos y qué tiene que hacer él
+    tarjeta_reglas = ""
+    if clasif:
+        n_pilotos = clasif.get("n_pilotos") or 0
+        premios = [x.strip() for x in (cfg.get("puntos_escape") or "").split(",")
+                   if x.strip()]
+        reparto = " · ".join(f"{i + 1}º: {e(v)} pt" for i, v in enumerate(premios))
+        linea_escape = (f'por orden de salida — {reparto}.' if reparto
+                        else 'salir antes da más puntos.')
+        if n_pilotos >= 3:
+            linea_karts = (f'el más rápido se lleva tantos puntos como pilotos apunten '
+                           f'su tiempo (apuntando los {n_pilotos}: {n_pilotos} al '
+                           f'primero, {n_pilotos - 1} al segundo… y 1 al último).')
+        else:
+            linea_karts = ('el más rápido se lleva tantos puntos como pilotos; '
+                           'el último, 1.')
+        if tanda_p == "3":
+            deberes = ('<div>🏎️ <strong>Apunta tu vuelta de la final</strong> aquí '
+                       'abajo en cuanto te bajes del kart.</div>')
+        elif corre_final:
+            deberes = ('<div>🏎️ <strong>Apunta tus dos vueltas</strong> aquí abajo: '
+                       'la de tu tanda y la de la final. Cuenta la mejor.</div>')
+        else:
+            deberes = ('<div>🏎️ <strong>Apunta tu vuelta</strong> aquí abajo en '
+                       'cuanto te bajes del kart.</div>')
+        if es_capitan:
+            deberes += ('<div>👑 <strong>Eres el capitán:</strong> al salir de vuestra '
+                        'sala, apunta aquí la hora de salida. Esa solo la puedes meter '
+                        'tú.</div>')
+        else:
+            deberes += ('<div>🗝️ La hora de salida de la escape room la apunta '
+                        'vuestro capitán (👑): tú, tranquilo.</div>')
+        tarjeta_reglas = f"""
+<div class="tarjeta">
+  <h2>🏆 Cómo se ganan los puntos</h2>
+  <div class="lista-datos">
+    <div>🗝️ <strong>Escape room</strong> — {linea_escape}
+    La hora la apunta el capitán de cada equipo.</div>
+    <div>🏎️ <strong>Karts</strong> — cuenta tu mejor vuelta: {linea_karts}
+    Todas las posiciones suman, así que apunta tu tiempo aunque no sea el mejor.</div>
+    <div>🏅 <strong>El premio</strong> —
+    gana el equipo con más puntos: medalla para todos sus miembros.</div>
+  </div>
+  <div class="etiqueta" style="margin-top:var(--e4)">Lo que te toca a ti</div>
+  <div class="lista-datos">{deberes}</div>
+</div>"""
+
+    panel_puntos = (f'{tarjeta_reglas}{tarjeta_capitan}{tarjeta_vuelta}'
                     f'<div class="tarjeta"><h2>🏆 Clasificación'
                     f'<span class="en-directo" style="float:right;font-weight:600">'
                     f'<span class="pulso"></span> en directo</span></h2>'
-                    f'<div id="zona-puntos">{fragmento_clasificacion(clasif)}</div>'
+                    f'<div id="zona-puntos">'
+                    f'{fragmento_clasificacion(clasif, nota=False)}</div>'
                     f'</div>') if clasif else ""
 
     # Su sala de la escape room, si está sorteada
@@ -1122,11 +1197,14 @@ def render_participante(cfg: dict, p: dict, equipo: dict | None,
                             if url else f'<div class="agenda-lugar">📍 {sitio}</div>')
         descripcion_sala = (f'<div class="silencio">{e(equipo.get("sala_desc"))}</div>'
                             if equipo.get("sala_desc") else "")
+        recuerdo_capitan = ('<div class="silencio">👑 Al salir, apunta la hora en la '
+                            'pestaña 🏆 Puntos: da 20, 10 o 5 puntos según el orden.'
+                            '</div>' if es_capitan else "")
         aviso_sala = _tarjeta_cita(
             "🗝️", cfg.get("escape_titulo") or "Escape room", cfg.get("escape_hora") or "",
             f'<strong>Vuestra sala: {e(equipo["sala"])}</strong>{descripcion_sala}'
             f'{enlace_sitio}<div class="silencio">Hay que estar allí a las '
-            f'{e(cfg.get("escape_hora"))}.</div>')
+            f'{e(cfg.get("escape_hora"))}.</div>{recuerdo_capitan}')
 
     # Su tanda de karts, si está sorteada
     aviso_tanda = ""
@@ -1153,7 +1231,58 @@ def render_participante(cfg: dict, p: dict, equipo: dict | None,
             "🏎️", cfg.get("karts_nombre") or "Karts",
             cfg.get(f"karts_hora{tanda}") or "",
             f'<strong>Te toca en la {ORDINAL_TANDA[tanda]} tanda</strong>'
-            f'{extra}{sitio_karts}')
+            f'{extra}{sitio_karts}<div class="silencio">Al bajarte del kart, apunta '
+            f'tu vuelta en la pestaña 🏆 Puntos.</div>')
+
+    # Olimpiada cerrada: felicitación a quien tiene premio y resultado para el resto
+    banda_final, confeti_color = "", ""
+    if ganadores and ganadores.get("equipos"):
+        campeones = ganadores["equipos"]
+        nombres = " y ".join(e(x["nombre"]) for x in campeones)
+        gane = bool(equipo and any(x["id"] == equipo["id"] for x in campeones))
+        rapido = any(x["id"] == p["id"] for x in (ganadores.get("pilotos") or []))
+        vuelta = e(ganadores.get("tiempo") or "")
+        nombres_rapidos = " y ".join(e(nombre_corto(x))
+                                     for x in (ganadores.get("pilotos") or []))
+        premio = ('<p><strong>🍰 Pásate a recoger tu premio en los postres.'
+                  '</strong></p>')
+        if gane:
+            confeti_color = color_equipo or "#CC0C18"
+            titulo = "¡Campeones!" if len(campeones) == 1 else "¡Campeones (empate arriba)!"
+            extra_rapido = (f'<p>🏎️ Y encima, <strong>vuelta rápida del día</strong> '
+                            f'con {vuelta}. Doblete.</p>' if rapido else "")
+            banda_final = f"""
+<div class="tarjeta destacada celebracion">
+  <div class="medallon" aria-hidden="true">🥇</div>
+  <h2>{titulo}</h2>
+  <p>Tu equipo, <strong>{nombres}</strong>, gana la Olimpiada con
+  <strong>{ganadores["puntos"]} puntos</strong>.</p>
+  {extra_rapido}
+  <p><strong>🏅 Tienes medalla.</strong></p>
+  {premio}
+</div>"""
+        elif rapido:
+            confeti_color = "#E8A013"
+            banda_final = f"""
+<div class="tarjeta destacada celebracion">
+  <div class="medallon" aria-hidden="true">🏎️</div>
+  <h2>¡Vuelta rápida del día!</h2>
+  <p>Nadie ha bajado de tu <strong>{vuelta}</strong>. El más rápido de la
+  Olimpiada eres tú.</p>
+  {premio}
+</div>"""
+        else:
+            nota_rapida = (f' La vuelta rápida ha sido para <strong>{nombres_rapidos}'
+                           f'</strong> ({vuelta}).' if nombres_rapidos else "")
+            banda_final = f"""
+<div class="tarjeta">
+  <h2>🏁 Se acabó la Olimpiada</h2>
+  <p style="margin-bottom:var(--e2)">Gana <strong>{nombres}</strong> con
+  {ganadores["puntos"]} puntos: sus medallas se entregan en los postres.
+  {nota_rapida}</p>
+  <p class="silencio" style="margin:0">¡Gracias por jugar! Tienes la
+  clasificación completa en la pestaña 🏆 Puntos.</p>
+</div>"""
 
     # El día del evento lo que hace falta es saber a dónde ir ahora, así que se
     # abre el Programa; los días previos, el equipo (que es la novedad).
@@ -1176,8 +1305,9 @@ def render_participante(cfg: dict, p: dict, equipo: dict | None,
   <span>🕘 {e(cfg.get('hora'))} h</span>
 </div>
 <div class="acciones" style="gap:6px">{chip}</div>
-{bienvenida}
-{_bloque_asistencia(p, cfg)}
+{"" if banda_final else bienvenida}
+{banda_final}
+{_bloque_asistencia(p, cfg) if not banda_final else ""}
 <nav class="pestanas" role="tablist" aria-label="Secciones">{pestanas}</nav>
 <div class="panel-pestana{' activa' if inicial == 'equipo' else ''}"
      id="panel-equipo" role="tabpanel">
@@ -1200,6 +1330,7 @@ def render_participante(cfg: dict, p: dict, equipo: dict | None,
 <script>
 var RUTA_EQUIPO = {json.dumps(ruta_equipo)};
 var RUTA_PUNTOS = {json.dumps(ruta_puntos)};
+var COLOR_PREMIO = {json.dumps(confeti_color)};
 {GUION_PARTICIPANTE}
 </script>
 """
@@ -1221,8 +1352,11 @@ NAV_ADMIN = [
 ]
 
 
-def fragmento_clasificacion(clasif: dict) -> str:
-    """La clasificación (se usa igual en el panel y en el móvil, y se refresca sola)."""
+def fragmento_clasificacion(clasif: dict, nota: bool = True) -> str:
+    """La clasificación (se usa igual en el panel y en el móvil, y se refresca sola).
+
+    `nota=False` quita el recordatorio del premio: en el móvil ya lo cuenta la
+    tarjeta «Cómo se ganan los puntos» justo encima."""
     tabla = clasif["equipos"]
     hay_puntos = any(fila["total"] for fila in tabla)
     medallas = ["🥇", "🥈", "🥉"]
@@ -1287,16 +1421,17 @@ def fragmento_clasificacion(clasif: dict) -> str:
     else:
         detalle = ('<p class="silencio">La clasificación se irá rellenando durante '
                    'el día: la salida de la escape room y las vueltas de los karts.</p>')
-    return (f'{podio}{detalle}'
-            f'<p class="silencio" style="margin-top:var(--e3)">🏅 <strong>Gana el '
-            f'equipo con más puntos: medalla para todos sus miembros.</strong> '
-            f'Karts: el más rápido se lleva tantos puntos como pilotos, el último 1 '
-            f'— todas las posiciones cuentan.</p>'
-            f'{bloque_salidas}{bloque_karts}')
+    recordatorio = (f'<p class="silencio" style="margin-top:var(--e3)">🏅 <strong>Gana '
+                    f'el equipo con más puntos: medalla para todos sus miembros.'
+                    f'</strong> Karts: el más rápido se lleva tantos puntos como '
+                    f'pilotos, el último 1 — todas las posiciones cuentan.</p>'
+                    if nota else '')
+    return f'{podio}{detalle}{recordatorio}{bloque_salidas}{bloque_karts}'
 
 
 def render_puntos(cfg: dict, clasif: dict, equipos: list[dict],
-                  participantes: list[dict], avisos=None, sin_password=False) -> str:
+                  participantes: list[dict], ganadores: dict | None = None,
+                  avisos=None, sin_password=False) -> str:
     filas_escape = ""
     for eq in equipos:
         capitan = next((nombre_corto(p) for p in participantes
@@ -1348,6 +1483,45 @@ def render_puntos(cfg: dict, clasif: dict, equipos: list[dict],
                             f'</div>')
         filas_karts += (f'<div><div class="etiqueta">{titulo}</div>{columna}</div>')
 
+    # Cerrar la Olimpiada: publica el resultado y felicita a los ganadores
+    cerrada = bool((cfg.get("resultado_final") or "").strip())
+    campeones = ", ".join(e(x["nombre"]) for x in (ganadores or {}).get("equipos", []))
+    rapidos = ", ".join(e(nombre_corto(x)) for x in (ganadores or {}).get("pilotos", []))
+    if campeones:
+        quien = (f'Ahora mismo ganaría <strong>{campeones}</strong> con '
+                 f'{ganadores["puntos"]} puntos'
+                 + (f', y la vuelta rápida sería para <strong>{rapidos}</strong> '
+                    f'({e(ganadores["tiempo"])})' if rapidos else "") + '.')
+    else:
+        quien = "Todavía no hay puntos: en cuanto los haya, aquí verás quién gana."
+    if cerrada:
+        boton_cierre = (
+            '<form class="compacta" method="post" action="/admin/puntos/final">'
+            '<input type="hidden" name="valor" value="">'
+            '<button class="boton secundario" type="submit">Quitar la felicitación'
+            '</button></form>')
+        estado = ('<div class="aviso ok" style="margin-top:var(--e3)">✅ Resultado '
+                  '<strong>publicado</strong>: cada uno ve al abrir su enlace si tiene '
+                  'premio y que lo recoge en los postres.</div>')
+    else:
+        boton_cierre = (
+            '<form class="compacta" method="post" action="/admin/puntos/final" '
+            "onsubmit=\"return confirm('Se publicará el resultado y todos verán "
+            "quién gana. ¿Seguir?')\">"
+            '<input type="hidden" name="valor" value="1">'
+            '<button class="boton" type="submit">🏁 Publicar el resultado y felicitar'
+            '</button></form>')
+        estado = ""
+    tarjeta_cierre = f"""
+<div class="tarjeta">
+  <h2>🏁 Cerrar la Olimpiada</h2>
+  <p class="silencio" style="margin-top:0">Cuando estén todos los tiempos, publica el
+  resultado: a los del equipo ganador y a la vuelta rápida del día les sale una
+  felicitación con el aviso de <strong>recoger el premio en los postres</strong>; al
+  resto, el resultado final. {quien}</p>
+  {boton_cierre}{estado}
+</div>"""
+
     cuerpo = f"""
 <div class="tarjeta">
   <h2>🏆 Clasificación</h2>
@@ -1384,6 +1558,8 @@ def render_puntos(cfg: dict, clasif: dict, equipos: list[dict],
       <button class="boton" type="submit">Guardar todos</button></div>
   </form>
 </div>
+
+{tarjeta_cierre}
 """
     return pagina_admin("Puntos", "/admin/puntos", cuerpo, avisos=avisos,
                         sin_password=sin_password)

@@ -260,7 +260,49 @@ ok("Tu vuelta en la final" in r.text and "Tu vuelta en la 3ª tanda" not in r.te
 pon_tanda(piloto, "1")
 
 
-# ------------------------------------------------------- 8. Copia de seguridad
+# ----------------------------------------- 8. Fin de fiesta: quién tiene premio
+titulo("Cierre de la Olimpiada y premios")
+r = c.get(f"/p/{piloto['token']}")
+ok("Cómo se ganan los puntos" in r.text, "todos tienen el tutorial de los puntos")
+ok("Lo que te toca a ti" in r.text, "y sus deberes: apuntar su vuelta")
+ok("recoger tu premio" not in r.text, "sin cerrar, nadie recibe felicitación")
+
+campeon = db.clasificacion()["equipos"][0]["equipo"]
+premios = db.ganadores(db.clasificacion())
+ok(premios["equipos"] and premios["equipos"][0]["id"] == campeon["id"],
+   "db.ganadores() señala al equipo con más puntos")
+ok(len(premios["pilotos"]) >= 1, "y a la vuelta rápida del día")
+
+c.post("/admin/puntos/final", data={"valor": "1"})
+uno_del_campeon = next(x for x in db.listar_participantes()
+                       if x["equipo_id"] == campeon["id"])
+db.marcar_revelado(uno_del_campeon["id"])
+r = c.get(f"/p/{uno_del_campeon['token']}")
+ok("Campeones" in r.text, "el campeón ve que ha ganado")
+ok("recoger tu premio en los postres" in r.text, "y que recoge el premio en los postres")
+
+rapido = premios["pilotos"][0]
+db.marcar_revelado(rapido["id"])
+r = c.get(f"/p/{rapido['token']}")
+ok("premio en los postres" in r.text, "el más rápido también tiene premio")
+
+perdedor = next((x for x in db.listar_participantes()
+                 if x["equipo_id"] and x["equipo_id"] != campeon["id"]
+                 and x["id"] not in [y["id"] for y in premios["pilotos"]]), None)
+if perdedor:
+    db.marcar_revelado(perdedor["id"])
+    r = c.get(f"/p/{perdedor['token']}")
+    ok("Se acabó la Olimpiada" in r.text and "Campeones" not in r.text,
+       "el resto ve el resultado, sin felicitación")
+    ok("¿Contamos contigo" not in r.text,
+       "y ya no se le pregunta si viene: el evento ha terminado")
+
+c.post("/admin/puntos/final", data={"valor": ""})
+r = c.get(f"/p/{uno_del_campeon['token']}")
+ok("Campeones" not in r.text, "se puede retirar el resultado si se publicó por error")
+
+
+# ------------------------------------------------------- 9. Copia de seguridad
 titulo("Copia de seguridad")
 copia = c.get("/admin/copia.db").data
 ok(copia.startswith(b"SQLite format 3\x00"), "la copia se descarga")
@@ -275,7 +317,7 @@ r = c.post("/admin/restaurar", data={"fichero": (io.BytesIO(b"no soy una copia")
 ok("no es una copia" in r.text, "un fichero que no es una copia se rechaza")
 
 
-# --------------------------------------------------------------- 9. Resultado
+# -------------------------------------------------------------- 10. Resultado
 print()
 if fallos:
     print(f"❌ {len(fallos)} fallo(s):")
