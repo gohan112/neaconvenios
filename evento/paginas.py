@@ -509,6 +509,12 @@ GUION_SORTEO = """
   boton.addEventListener('click', function(){
     boton.style.display = 'none';
     if (intro) intro.style.display = 'none';
+    // Al empezar a girar hay que soltar la animación de aparición: la clase
+    // «girando» sustituye la propiedad animation, y sin esto la caja se
+    // quedaría con la opacidad 0 de partida (invisible justo en lo bueno).
+    caja.classList.remove('aparece-tarde');
+    caja.style.opacity = '1';
+    caja.style.animationDelay = '0s';
     caja.classList.add('girando');
     var n = EQUIPOS.length;
     var total = 4 * n + FINAL + 1;   // acaba exactamente en FINAL
