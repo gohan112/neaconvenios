@@ -193,7 +193,67 @@ ok("<script>alert(1)</script>" not in r.text, "los nombres se escapan (sin HTML 
 db.borrar_participante(malo)
 
 
-# ------------------------------------------------------- 7. Copia de seguridad
+# ---------------------------------------- 7. Cada piloto apunta su vuelta
+titulo("Cada piloto mete su tiempo de karts")
+
+
+def pon_tanda(persona: dict, valor: str) -> dict:
+    """Cambia la tanda de alguien desde el panel (como haría el organizador)."""
+    c.post(f"/admin/participantes/{persona['id']}/guardar",
+           data={"nombre": persona["nombre"], "apodo": persona.get("apodo") or "",
+                 "rol": persona.get("rol") or "",
+                 "telefono": persona.get("telefono") or "",
+                 "email": persona.get("email") or "",
+                 "equipo_id": persona["equipo_id"] or "",
+                 "notas": persona.get("notas") or "", "tanda": valor})
+    return db.participante(persona["id"])
+
+
+piloto = next(p for p in db.listar_participantes()
+              if (p.get("tanda") or "") in ("1", "2"))
+db.marcar_revelado(piloto["id"])
+r = c.get(f"/p/{piloto['token']}")
+ok("Tu vuelta en la" in r.text, "cada uno ve el hueco de su tanda")
+ok("Tu vuelta en la final" not in r.text, "sin pasar a la final no hay hueco extra")
+c.post(f"/p/{piloto['token']}/tiempo_karts", data={"tiempo": "1:02.45"})
+ok(db.participante(piloto["id"])["tiempo_karts"] == "1:02.45", "su vuelta se guarda")
+r = c.post(f"/p/{piloto['token']}/tiempo_karts", data={"tiempo": "rapidísimo"},
+           follow_redirects=True)
+ok("no se entiende" in r.text, "un tiempo mal escrito se rechaza con un aviso")
+ok(db.participante(piloto["id"])["tiempo_karts"] == "1:02.45",
+   "y no se borra el que ya estaba")
+ok(c.post(f"/p/{piloto['token']}/tiempo_karts",
+          data={"tiempo_final": "40.0"}).status_code == 403,
+   "nadie puede colarse en la final")
+
+c.post("/admin/puntos/karts", data={"finalista": str(piloto["id"])})
+piloto = db.participante(piloto["id"])
+ok(db.corre_la_final(piloto), "el panel marca quién pasa a la final")
+r = c.get(f"/p/{piloto['token']}")
+ok("Tu vuelta en la final" in r.text, "al finalista se le abre el hueco extra")
+ok("Has pasado a la final" in r.text, "y se le avisa en su programa")
+formulario = r.text.split(
+    f'action="/p/{piloto["token"]}/tiempo_karts"')[1].split("</form>")[0]
+ok('name="tiempo"' in formulario and 'name="tiempo_final"' in formulario
+   and formulario.count("submit") == 1,
+   "las dos vueltas van en el mismo formulario, con un solo Guardar")
+c.post(f"/p/{piloto['token']}/tiempo_karts",
+       data={"tiempo": "1:02.45", "tiempo_final": "0:59.90"})
+piloto = db.participante(piloto["id"])
+ok(piloto["tiempo_karts"] == "1:02.45" and piloto["tiempo_final"] == "0:59.90",
+   "las dos vueltas se guardan de una vez, sin pisarse")
+fila = next(f for f in db.clasificacion()["karts"]
+            if f["participante"]["id"] == piloto["id"])
+ok(fila["tiempo"] == "0:59.90", "para los puntos cuenta la mejor de las dos")
+
+piloto = pon_tanda(piloto, "3")
+r = c.get(f"/p/{piloto['token']}")
+ok("Tu vuelta en la final" in r.text and "Tu vuelta en la 3ª tanda" not in r.text,
+   "quien sale ya en la 3ª tanda solo tiene un hueco")
+pon_tanda(piloto, "1")
+
+
+# ------------------------------------------------------- 8. Copia de seguridad
 titulo("Copia de seguridad")
 copia = c.get("/admin/copia.db").data
 ok(copia.startswith(b"SQLite format 3\x00"), "la copia se descarga")
@@ -208,7 +268,7 @@ r = c.post("/admin/restaurar", data={"fichero": (io.BytesIO(b"no soy una copia")
 ok("no es una copia" in r.text, "un fichero que no es una copia se rechaza")
 
 
-# --------------------------------------------------------------- 8. Resultado
+# --------------------------------------------------------------- 9. Resultado
 print()
 if fallos:
     print(f"❌ {len(fallos)} fallo(s):")

@@ -152,7 +152,8 @@ def ver_participante(token: str):
         agenda=db.agenda_para(p["equipo_id"]), lugares=db.listar_lugares(),
         referencia=db.hoy(), lugar_escape=lugar_escape,
         lugar_karts=lugar_karts, clasif=db.clasificacion(),
-        hora_actual=_hora_si_es_hoy(cfg), avisos=_avisos(),
+        hora_actual=_hora_si_es_hoy(cfg), corre_final=db.corre_la_final(p),
+        avisos=_avisos(),
     )
 
 
@@ -200,6 +201,35 @@ def puntos_fragmento(token: str):
     if not p:
         abort(404)
     return paginas.fragmento_clasificacion(db.clasificacion())
+
+
+@app.post("/p/<token>/tiempo_karts")
+def participante_tiempo_karts(token: str):
+    """Cada piloto apunta su propia vuelta (la de su tanda o la de la final)."""
+    p = db.participante_por_token(token)
+    if not p:
+        abort(404)
+    if "tiempo_final" in request.form and not db.corre_la_final(p):
+        abort(403)          # el hueco de la final solo lo tiene quien la corre
+    guardados, con_texto, error = 0, 0, False
+    for campo, es_final in (("tiempo", False), ("tiempo_final", True)):
+        if campo not in request.form:
+            continue
+        texto = (request.form.get(campo) or "").strip()
+        if texto and db.parsear_tiempo_vuelta(texto) is None:
+            error = True
+            continue        # los que sí se entienden se guardan igual
+        db.poner_tiempo_karts(p["id"], texto, final=es_final)
+        guardados += 1
+        con_texto += 1 if texto else 0
+    if error:
+        flash("Ese tiempo no se entiende: escríbelo como 1:02.45 (minutos:segundos"
+              ".centésimas) o 48.12 si bajaste del minuto.", "error")
+    elif con_texto:
+        flash("¡Tiempo guardado! Ya cuenta en la clasificación.", "ok")
+    elif guardados:
+        flash("Tiempo borrado.", "ok")
+    return redirect(f"/p/{token}#puntos")
 
 
 @app.post("/p/<token>/revelado")
@@ -773,10 +803,15 @@ def admin_puntos_escape():
 @app.post("/admin/puntos/karts")
 @requiere_admin
 def admin_puntos_karts():
+    finalistas = set(request.form.getlist("finalista"))
     for p in db.listar_participantes():
         campo = f"tiempo_{p['id']}"
         if campo in request.form:
             db.poner_tiempo_karts(p["id"], request.form.get(campo, ""))
+        campo_final = f"final_{p['id']}"
+        if campo_final in request.form:
+            db.poner_tiempo_karts(p["id"], request.form.get(campo_final, ""), final=True)
+        db.marcar_finalista(p["id"], str(p["id"]) in finalistas)
     flash("Tiempos de karts guardados.", "ok")
     return redirect("/admin/puntos")
 

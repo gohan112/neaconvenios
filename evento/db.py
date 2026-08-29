@@ -95,7 +95,9 @@ CREATE TABLE IF NOT EXISTS participantes (
   email         TEXT NOT NULL DEFAULT '',
   equipo_id     INTEGER REFERENCES equipos(id) ON DELETE SET NULL,
   token         TEXT NOT NULL UNIQUE,
-  tiempo_karts  TEXT NOT NULL DEFAULT '',      -- su mejor vuelta (p. ej. 48.123)
+  tiempo_karts  TEXT NOT NULL DEFAULT '',      -- su vuelta en su tanda (1:02.45)
+  tiempo_final  TEXT NOT NULL DEFAULT '',      -- su vuelta en la 3ª tanda (la final)
+  finalista     INTEGER NOT NULL DEFAULT 0,    -- pasa a la final por tiempo
   grupo_sorteo  TEXT NOT NULL DEFAULT '',      -- quienes comparten grupo van JUNTOS
   visto_en      TEXT,                          -- primera vez que abrió su enlace
   revelado_en   TEXT,                          -- cuándo vio la animación del sorteo
@@ -164,6 +166,10 @@ def iniciar() -> None:
         con.execute("ALTER TABLE participantes ADD COLUMN tanda TEXT NOT NULL DEFAULT ''")
     if "tiempo_karts" not in columnas:
         con.execute("ALTER TABLE participantes ADD COLUMN tiempo_karts TEXT NOT NULL DEFAULT ''")
+    if "tiempo_final" not in columnas:
+        con.execute("ALTER TABLE participantes ADD COLUMN tiempo_final TEXT NOT NULL DEFAULT ''")
+    if "finalista" not in columnas:
+        con.execute("ALTER TABLE participantes ADD COLUMN finalista INTEGER NOT NULL DEFAULT 0")
     columnas_eq = {r["name"] for r in con.execute("PRAGMA table_info(equipos)")}
     if "sala" not in columnas_eq:
         con.execute("ALTER TABLE equipos ADD COLUMN sala TEXT NOT NULL DEFAULT ''")
@@ -584,12 +590,28 @@ def poner_tiempo_escape(equipo_id: int, texto: str) -> None:
     con.close()
 
 
-def poner_tiempo_karts(participante_id: int, texto: str) -> None:
+def poner_tiempo_karts(participante_id: int, texto: str, final: bool = False) -> None:
+    """Guarda su vuelta: la de su tanda o, con final=True, la de la 3ª tanda."""
+    columna = "tiempo_final" if final else "tiempo_karts"
     con = conexion()
-    con.execute("UPDATE participantes SET tiempo_karts = ? WHERE id = ?",
+    con.execute(f"UPDATE participantes SET {columna} = ? WHERE id = ?",
                 ((texto or "").strip(), participante_id))
     con.commit()
     con.close()
+
+
+def marcar_finalista(participante_id: int, pasa: bool) -> None:
+    """Los dos mejores tiempos pasan a la final: se les abre un hueco extra."""
+    con = conexion()
+    con.execute("UPDATE participantes SET finalista = ? WHERE id = ?",
+                (1 if pasa else 0, participante_id))
+    con.commit()
+    con.close()
+
+
+def corre_la_final(p: dict) -> bool:
+    """Corre la 3ª tanda quien se quedó fuera de las dos primeras o clasificó."""
+    return (p.get("tanda") or "").strip() == "3" or bool(p.get("finalista"))
 
 
 def parsear_hora_dia(texto: str) -> int | None:
@@ -650,16 +672,25 @@ def clasificacion() -> dict:
             escape.append({"equipo": eq, "tiempo": eq.get("tiempo_escape") or "",
                            "puntos": 0})
 
-    # Karts (individual)
-    corredores = [(p, parsear_tiempo_vuelta(p.get("tiempo_karts") or ""))
-                  for p in participantes_]
+    # Karts (individual): de sus dos vueltas posibles cuenta la mejor
+    def mejor_vuelta(p: dict):
+        tiempos = [x for x in (parsear_tiempo_vuelta(p.get("tiempo_karts") or ""),
+                               parsear_tiempo_vuelta(p.get("tiempo_final") or ""))
+                   if x is not None]
+        return min(tiempos) if tiempos else None
+
+    corredores = [(p, mejor_vuelta(p)) for p in participantes_]
     ordenados = sorted([x for x in corredores if x[1] is not None], key=lambda x: x[1])
     n = len(ordenados)
     puntos_karts_equipo: dict[int, int] = {}
     karts = []
-    for i, (p, _ms) in enumerate(ordenados):
+    for i, (p, ms) in enumerate(ordenados):
         pts = n - i  # el mejor se lleva n, el último 1
-        karts.append({"participante": p, "tiempo": p.get("tiempo_karts"), "puntos": pts})
+        # se enseña la vuelta que le ha puntuado, que puede ser la de la final
+        final = p.get("tiempo_final") or ""
+        cual = (final if parsear_tiempo_vuelta(final) == ms
+                else p.get("tiempo_karts"))
+        karts.append({"participante": p, "tiempo": cual, "puntos": pts})
         if p.get("equipo_id"):
             puntos_karts_equipo[p["equipo_id"]] = \
                 puntos_karts_equipo.get(p["equipo_id"], 0) + pts
@@ -950,7 +981,8 @@ def resumen() -> dict:
         "con_tanda":     contar("SELECT COUNT(*) FROM participantes "
                                 "WHERE trim(tanda) != ''"),
         "con_vuelta":    contar("SELECT COUNT(*) FROM participantes "
-                                "WHERE trim(tiempo_karts) != ''"),
+                                "WHERE trim(tiempo_karts) != '' "
+                                "   OR trim(tiempo_final) != ''"),
         "con_capitan":   contar("SELECT COUNT(*) FROM equipos "
                                 "WHERE capitan_id IS NOT NULL"),
         "con_sala":      contar("SELECT COUNT(*) FROM equipos "

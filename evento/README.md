@@ -49,16 +49,23 @@ seguridad es copiar ese fichero.
    **🗝️ Salas de la escape room** (una sala por equipo, al azar, con
    restricción opcional «esta sala no puede tocarle a este equipo») y
    **🏎️ Tandas de karts** (8 y 8 al azar repartiendo cada equipo entre ambas;
-   los que quedan fuera, a la 3ª — la final — junto a los mejores tiempos, que
-   se ajustan a mano en la ficha de cada participante). Cada participante ve
-   su sala y su tanda en su Programa.
+   los que quedan fuera, a la 3ª — la final — junto a los 2 mejores tiempos,
+   que marcas en 🏆 Puntos con «pasa a la final»). Cada participante ve su
+   sala y su tanda en su Programa, y al que pasa a la final se le avisa
+   ahí mismo.
 5. **🏆 Puntos** — el sistema de puntos del día: en **🎽 Equipos** se sortea
-   un **capitán** por equipo (👑), y ese capitán apunta desde su móvil la hora
-   de salida de su sala de la escape room. La escape reparte puntos por orden
-   de salida (editables; 20/10/5 por defecto) y en los karts cada piloto
-   puntúa por su mejor vuelta: el más rápido tantos puntos como pilotos, el
-   último 1 — todas las posiciones cuentan. La **clasificación en directo**
-   (escape + karts + total) la ve todo el mundo en la pestaña 🏆 de su enlace;
+   un **capitán** por equipo (👑), y ese capitán —y solo él— apunta desde su
+   móvil la hora de salida de su sala de la escape room. La escape reparte
+   puntos por orden de salida (editables; 20/10/5 por defecto). En los karts
+   **cada piloto mete su propia vuelta** desde su enlace (minutos:segundos.
+   centésimas, `1:02.45`, o `48.12` si bajó del minuto); los 2 que pasan a la
+   final tienen un **hueco extra** para la vuelta de la 3ª tanda y les cuenta
+   la mejor de las dos. Para abrirles ese hueco, marca «pasa a la final» en
+   🏆 Puntos del panel (ahí también puedes corregir o meter tú cualquier
+   tiempo). Cada piloto puntúa por su mejor vuelta: el más rápido tantos
+   puntos como pilotos, el último 1 — todas las posiciones cuentan. La
+   **clasificación en directo** (escape + karts + total) la ve todo el mundo
+   en la pestaña 🏆 de su enlace;
    gana el equipo con más puntos (medalla para todos sus miembros).
 6. **🔗 Enlaces** — cada participante tiene su enlace personal. Repártelos con
    el botón de **WhatsApp** (mensaje ya escrito, plantilla editable), copiando

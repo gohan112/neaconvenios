@@ -370,6 +370,18 @@ fieldset{border:0;margin:0;padding:0}
              padding:4px 0}
 .fila-tiempo label{margin:0;font-weight:600;color:var(--tinta);font-size:14.5px}
 .fila-tiempo input{width:110px;flex:none;font-variant-numeric:tabular-nums}
+.fila-tiempo.sub-final{padding:0 0 6px var(--e2);margin-left:3px;
+                       border-left:2px solid var(--borde)}
+.fila-tiempo.sub-final label{font-size:13.5px;font-weight:500;color:var(--gris);
+                             display:inline-flex;align-items:center;gap:7px;
+                             cursor:pointer}
+.fila-tiempo.sub-final input{width:96px}
+.campos-vuelta{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));
+               gap:var(--e2) var(--e3);margin-top:var(--e3)}
+.campos-vuelta label{margin-top:0}
+.campos-vuelta input{width:100%;font-variant-numeric:tabular-nums}
+input[type=checkbox]{width:18px;height:18px;min-height:0;flex:none;padding:0;
+                     accent-color:var(--rojo);cursor:pointer}
 
 /* Utilidades y varios */
 .acciones{display:flex;gap:var(--e2);flex-wrap:wrap;align-items:center}
@@ -999,6 +1011,23 @@ def _tarjeta_cita(icono: str, titulo: str, hora: str, cuerpo: str) -> str:
 </div>"""
 
 
+def _form_vueltas(token: str, filas: list[tuple]) -> str:
+    """El formulario donde el piloto apunta su vuelta (y la de la final, si la corre).
+
+    Va todo en un único formulario con un solo «Guardar»: si fueran dos, quien
+    escribiese los dos tiempos y diera a un botón perdería el otro."""
+    campos = ""
+    for ident, campo, etiqueta, valor in filas:
+        campos += (f'<div><label for="{ident}">{etiqueta}</label>'
+                   f'<input id="{ident}" name="{campo}" value="{e(valor or "")}" '
+                   f'placeholder="1:02.45" inputmode="decimal" autocomplete="off">'
+                   f'</div>')
+    return (f'<form method="post" action="/p/{e(token)}/tiempo_karts">'
+            f'<div class="campos-vuelta">{campos}</div>'
+            f'<button class="boton" type="submit" style="margin-top:var(--e3)">'
+            f'Guardar</button></form>')
+
+
 def render_participante(cfg: dict, p: dict, equipo: dict | None,
                         companeros: list[dict], agenda: list[dict],
                         lugares: list[dict], referencia: date,
@@ -1006,6 +1035,7 @@ def render_participante(cfg: dict, p: dict, equipo: dict | None,
                         lugar_karts: dict | None = None,
                         clasif: dict | None = None,
                         hora_actual: str | None = None,
+                        corre_final: bool = False,
                         avisos=None) -> str:
     contador = cuenta_atras(cfg.get("fecha", ""), referencia)
     chip = f'<span class="fecha-chip">{e(contador)}</span>' if contador else ""
@@ -1044,7 +1074,37 @@ def render_participante(cfg: dict, p: dict, equipo: dict | None,
     <button class="boton" type="submit">Guardar</button>
   </form>
 </div>"""
-    panel_puntos = (f'{tarjeta_capitan}<div class="tarjeta"><h2>🏆 Clasificación'
+    # Cada piloto apunta su propia vuelta. Quien corre la 3ª tanda (los 2 que se
+    # quedaron fuera y los 2 que pasan por tiempo) tiene ahí su hueco extra.
+    tarjeta_vuelta = ""
+    tanda_p = (p.get("tanda") or "").strip()
+    ya_puso = bool((p.get("tiempo_karts") or "").strip()
+                   or (p.get("tiempo_final") or "").strip())
+    if tanda_p in ORDINAL_TANDA or corre_final or ya_puso:
+        filas = []
+        if tanda_p != "3":          # quien sale en la 3ª tanda solo corre la final
+            filas.append(("mi-vuelta", "tiempo",
+                          (f"Tu vuelta en la {ORDINAL_TANDA[tanda_p]} tanda"
+                           if tanda_p in ORDINAL_TANDA else "Tu mejor vuelta"),
+                          p.get("tiempo_karts")))
+        if corre_final:
+            filas.append(("mi-vuelta-final", "tiempo_final",
+                          "Tu vuelta en la final (3ª tanda)", p.get("tiempo_final")))
+        campos = _form_vueltas(p["token"], filas)
+        nota_final = ('<p class="silencio" style="margin-bottom:0">Corres dos veces: '
+                      'para los puntos cuenta tu <strong>mejor</strong> vuelta de las '
+                      'dos.</p>' if corre_final and tanda_p != "3" else "")
+        tarjeta_vuelta = f"""
+<div class="tarjeta">
+  <h2>🏎️ Tu vuelta en los karts</h2>
+  <p class="silencio" style="margin-top:0">Apúntala tal y como sale en la pantalla del
+  circuito: minutos, segundos y centésimas (<code>1:02.45</code>). Si bajaste del
+  minuto, con <code>48.12</code> vale. Cuanto más rápido, más puntos para tu equipo.</p>
+  {campos}{nota_final}
+</div>"""
+
+    panel_puntos = (f'{tarjeta_capitan}{tarjeta_vuelta}'
+                    f'<div class="tarjeta"><h2>🏆 Clasificación'
                     f'<span class="en-directo" style="float:right;font-weight:600">'
                     f'<span class="pulso"></span> en directo</span></h2>'
                     f'<div id="zona-puntos">{fragmento_clasificacion(clasif)}</div>'
@@ -1072,9 +1132,15 @@ def render_participante(cfg: dict, p: dict, equipo: dict | None,
     aviso_tanda = ""
     tanda = (p.get("tanda") or "").strip()
     if tanda in ORDINAL_TANDA:
-        extra = ('<div class="silencio">A la 3ª tanda, la final, también irán los '
-                 '2 mejores tiempos de las tandas anteriores.</div>'
-                 if tanda == "3" else "")
+        extra = ""
+        if tanda == "3":
+            extra = ('<div class="silencio">A la 3ª tanda, la final, también irán los '
+                     '2 mejores tiempos de las tandas anteriores.</div>')
+        elif corre_final:
+            hora_final = (cfg.get("karts_hora3") or "").strip()
+            extra = ('<div class="silencio">🎉 <strong>¡Has pasado a la final!</strong> '
+                     'Vuelves a pista en la 3ª tanda'
+                     f'{f" a las {e(hora_final)}" if hora_final else ""}.</div>')
         sitio_karts = ""
         if lugar_karts:
             url = enlace_maps(lugar_karts)
@@ -1257,13 +1323,29 @@ def render_puntos(cfg: dict, clasif: dict, equipos: list[dict],
         columna = ""
         for p in grupo:
             tanda = (p.get("tanda") or "").strip()
+            nombre = e(nombre_corto(p))
+            sufijo = f" · {ORDINAL_TANDA[tanda]}" if tanda in ORDINAL_TANDA else ""
+            if tanda == "3":     # sale directo en la final: un único hueco
+                columna += (f'<div class="fila-tiempo">'
+                            f'<label for="f{p["id"]}">{nombre}{sufijo}</label>'
+                            f'<input id="f{p["id"]}" name="final_{p["id"]}" '
+                            f'value="{e(p.get("tiempo_final"))}" inputmode="decimal" '
+                            f'placeholder="48.123" size="8"></div>')
+                continue
             columna += (f'<div class="fila-tiempo">'
-                        f'<label for="t{p["id"]}">{e(nombre_corto(p))}'
-                        f'{f" · {ORDINAL_TANDA[tanda]}" if tanda in ORDINAL_TANDA else ""}'
-                        f'</label>'
+                        f'<label for="t{p["id"]}">{nombre}{sufijo}</label>'
                         f'<input id="t{p["id"]}" name="tiempo_{p["id"]}" '
                         f'value="{e(p.get("tiempo_karts"))}" inputmode="decimal" '
                         f'placeholder="48.123" size="8"></div>')
+            if tanda in ("1", "2"):   # puede pasar a la final por tiempo
+                marca = " checked" if p.get("finalista") else ""
+                columna += (f'<div class="fila-tiempo sub-final">'
+                            f'<label><input type="checkbox" name="finalista" '
+                            f'value="{p["id"]}"{marca}> pasa a la final</label>'
+                            f'<input name="final_{p["id"]}" inputmode="decimal" '
+                            f'value="{e(p.get("tiempo_final"))}" placeholder="3ª tanda" '
+                            f'size="8" aria-label="Vuelta de {nombre} en la 3ª tanda">'
+                            f'</div>')
         filas_karts += (f'<div><div class="etiqueta">{titulo}</div>{columna}</div>')
 
     cuerpo = f"""
@@ -1289,10 +1371,13 @@ def render_puntos(cfg: dict, clasif: dict, equipos: list[dict],
 
 <div class="tarjeta">
   <h2>🏎️ Karts — mejor vuelta de cada piloto</h2>
-  <p class="silencio" style="margin-top:0">Formatos válidos: <code>48.123</code>,
-  <code>48,3</code> o <code>1:02.451</code>. Para los 2 finalistas cuenta su mejor
-  tiempo de las dos tandas. El más rápido se lleva tantos puntos como pilotos con
-  tiempo; el último, 1.</p>
+  <p class="silencio" style="margin-top:0">Cada piloto mete su vuelta desde su
+  enlace (pestaña 🏆 Puntos); aquí puedes corregirla o meterla tú. Formatos válidos:
+  <code>48.123</code>, <code>48,3</code> o <code>1:02.451</code>.</p>
+  <p class="silencio">Marca <strong>«pasa a la final»</strong> en los 2 mejores
+  tiempos: se les abre el hueco de la 3ª tanda en su móvil y cuenta su mejor vuelta
+  de las dos. El más rápido se lleva tantos puntos como pilotos con tiempo; el
+  último, 1.</p>
   <form method="post" action="/admin/puntos/karts">
     <div class="rejilla-tiempos">{filas_karts}</div>
     <div style="margin-top:var(--e4)">
