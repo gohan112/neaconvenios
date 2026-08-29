@@ -48,7 +48,28 @@ sudo systemctl enable --now neaevento
 sleep 3
 sudo systemctl --no-pager status neaevento | head -5 || true
 
-IP="$(curl -s ifconfig.me || echo TU_IP_PUBLICA)"
+# IP pública IPv4. Se pregunta primero a los metadatos de la propia instancia
+# (dentro de AWS es lo fiable); si no, a un servicio externo forzando IPv4 con
+# -4: sin eso, una máquina con IPv6 responde su dirección larga, que no vale
+# para repartir enlaces.
+ip_publica() {
+  local ip token
+  ip="$(curl -s -m 3 http://169.254.169.254/latest/meta-data/public-ipv4 2>/dev/null || true)"
+  if [ -z "$ip" ]; then
+    token="$(curl -s -m 3 -X PUT http://169.254.169.254/latest/api/token \
+             -H 'X-aws-ec2-metadata-token-ttl-seconds: 60' 2>/dev/null || true)"
+    if [ -n "$token" ]; then
+      ip="$(curl -s -m 3 -H "X-aws-ec2-metadata-token: $token" \
+            http://169.254.169.254/latest/meta-data/public-ipv4 2>/dev/null || true)"
+    fi
+  fi
+  [ -z "$ip" ] && ip="$(curl -4 -s -m 5 ifconfig.me 2>/dev/null || true)"
+  case "$ip" in
+    *[0-9].[0-9]*) printf '%s' "$ip" ;;
+    *) printf '%s' "TU_IP_PUBLICA" ;;
+  esac
+}
+IP="$(ip_publica)"
 echo ""
 echo "============================================================"
 echo "  NeaEvento en marcha."
