@@ -34,3 +34,4 @@ evento/*.db
 evento/*.db-*
 evento/*.csv
 clave_admin.txt
+evento/.version_fallida
