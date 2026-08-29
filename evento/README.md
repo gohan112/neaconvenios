@@ -107,6 +107,27 @@ URL pública en ⚙️ Evento. (Si la rama ya se fusionó, cambia
 `claude/event-app-day-12-e4lcrp` por `main` en la URL. Con el código ya en el
 servidor: `bash deploy/setup.sh`.)
 
+### Se actualiza sola
+
+El instalador deja también un temporizador (`neaevento-update.timer`) que cada
+5 minutos mira si hay versión nueva en GitHub. Si la hay: la baja, instala lo
+que falte, **pasa las pruebas** y reinicia el servicio. Si algo falla, vuelve
+sola a la versión anterior, apunta cuál falló para no reintentarla y la app
+sigue funcionando con la versión buena. La base de datos del evento
+(`evento.db`) no se toca nunca: no está en el repositorio.
+
+```bash
+journalctl -u neaevento-update -n 50      # qué ha hecho
+sudo systemctl start neaevento-update     # actualizar ahora, sin esperar
+sudo systemctl disable --now neaevento-update.timer   # desactivarla
+```
+
+Para instalarla en un servidor que ya estaba en marcha, una última vez a mano:
+
+```bash
+cd ~/neaevento && git pull && bash evento/deploy/setup.sh
+```
+
 Opción B — Docker:
 
 ```bash
