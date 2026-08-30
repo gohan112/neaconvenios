@@ -684,8 +684,11 @@ def clasificacion() -> dict:
     n = len(ordenados)
     puntos_karts_equipo: dict[int, int] = {}
     karts = []
+    puntos_por_tiempo: dict[int, int] = {}
     for i, (p, ms) in enumerate(ordenados):
-        pts = n - i  # el mejor se lleva n, el último 1
+        # el mejor se lleva n, el último 1; y si dos empatan a la milésima, los
+        # dos se llevan lo mismo (nadie pierde un punto por el orden de la lista)
+        pts = puntos_por_tiempo.setdefault(ms, n - i)
         # se enseña la vuelta que le ha puntuado, que puede ser la de la final
         final = p.get("tiempo_final") or ""
         cual = (final if parsear_tiempo_vuelta(final) == ms

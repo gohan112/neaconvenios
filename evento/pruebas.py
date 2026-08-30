@@ -142,6 +142,11 @@ ok(all((p.get("tanda") or "") in ("1", "2", "3") for p in db.listar_participante
 titulo("Puntos y clasificación")
 ok(db.parsear_tiempo_vuelta("1:02.451") == 62451, "se entiende una vuelta 1:02.451")
 ok(db.parsear_tiempo_vuelta("48,3") == 48300, "se entiende una vuelta 48,3")
+ok(db.parsear_tiempo_vuelta("34.567") == 34567 and db.parsear_tiempo_vuelta("34.5") == 34500,
+   "las milésimas cuentan, y con menos decimales no se desplazan")
+ok(db.parsear_tiempo_vuelta("1'02.451") == 62451, "también con apóstrofo, como el circuito")
+ok(db.parsear_tiempo_vuelta("48.123") < db.parsear_tiempo_vuelta("48.124"),
+   "una milésima decide quién va delante")
 ok(db.parsear_hora_dia("10:05") == 36300, "se entiende una hora de salida 10:05")
 ok(db.parsear_tiempo_vuelta("lo que sea") is None, "un texto raro no puntúa")
 
@@ -160,6 +165,16 @@ ok(clasif["karts"][0]["puntos"] == 8 and clasif["karts"][-1]["puntos"] == 1,
    "en los karts puntúan todos: 8 al más rápido y 1 al último")
 ok(clasif["equipos"][0]["total"] >= clasif["equipos"][-1]["total"],
    "la clasificación va ordenada por puntos")
+
+# empate a la milésima: los dos se llevan los mismos puntos
+dos = db.listar_participantes()[:2]
+for x in dos:
+    db.poner_tiempo_karts(x["id"], "0:42.500")
+filas = {f["participante"]["id"]: f["puntos"] for f in db.clasificacion()["karts"]}
+ok(filas[dos[0]["id"]] == filas[dos[1]["id"]],
+   "dos vueltas idénticas puntúan igual (no decide el orden de la lista)")
+for i, x in enumerate(dos):     # se deshace el empate para lo que viene después
+    db.poner_tiempo_karts(x["id"], f"0:42.5{i + 1}0")
 
 
 # --------------------------------------------- 6. Lo que ve cada participante

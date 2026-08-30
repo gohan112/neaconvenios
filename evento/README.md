@@ -58,7 +58,7 @@ seguridad es copiar ese fichero.
    móvil la hora de salida de su sala de la escape room. La escape reparte
    puntos por orden de salida (editables; 20/10/5 por defecto). En los karts
    **cada piloto mete su propia vuelta** desde su enlace (minutos:segundos.
-   centésimas, `1:02.45`, o `48.12` si bajó del minuto); los 2 que pasan a la
+   milésimas, `1:02.451`, o `48.123` si bajó del minuto); los 2 que pasan a la
    final tienen un **hueco extra** para la vuelta de la 3ª tanda y les cuenta
    la mejor de las dos. Para abrirles ese hueco, marca «pasa a la final» en
    🏆 Puntos del panel (ahí también puedes corregir o meter tú cualquier

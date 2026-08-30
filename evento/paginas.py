@@ -1047,7 +1047,7 @@ def _form_vueltas(token: str, filas: list[tuple]) -> str:
     for ident, campo, etiqueta, valor in filas:
         campos += (f'<div><label for="{ident}">{etiqueta}</label>'
                    f'<input id="{ident}" name="{campo}" value="{e(valor or "")}" '
-                   f'placeholder="1:02.45" inputmode="decimal" autocomplete="off">'
+                   f'placeholder="1:02.451" inputmode="decimal" autocomplete="off">'
                    f'</div>')
     return (f'<form method="post" action="/p/{e(token)}/tiempo_karts">'
             f'<div class="campos-vuelta">{campos}</div>'
@@ -1127,8 +1127,9 @@ def render_participante(cfg: dict, p: dict, equipo: dict | None,
 <div class="tarjeta">
   <h2>🏎️ Tu vuelta en los karts</h2>
   <p class="silencio" style="margin-top:0">Apúntala tal y como sale en la pantalla del
-  circuito: minutos, segundos y centésimas (<code>1:02.45</code>). Si bajaste del
-  minuto, con <code>48.12</code> vale. Cuanto más rápido, más puntos para tu equipo.</p>
+  circuito, con todos los decimales que te dé: minutos, segundos y milésimas
+  (<code>1:02.451</code>). Valen también <code>1:02.45</code> y, si bajaste del
+  minuto, <code>48.123</code>. Cuanto más rápido, más puntos para tu equipo.</p>
   {campos}{nota_final}
 </div>"""
 
@@ -1549,7 +1550,8 @@ def render_puntos(cfg: dict, clasif: dict, equipos: list[dict],
   <h2>🏎️ Karts — mejor vuelta de cada piloto</h2>
   <p class="silencio" style="margin-top:0">Cada piloto mete su vuelta desde su
   enlace (pestaña 🏆 Puntos); aquí puedes corregirla o meterla tú. Formatos válidos:
-  <code>48.123</code>, <code>48,3</code> o <code>1:02.451</code>.</p>
+  <code>48.123</code>, <code>48,3</code> o <code>1:02.451</code> — hasta
+  milésimas, tal y como salga en la pantalla del circuito.</p>
   <p class="silencio">Marca <strong>«pasa a la final»</strong> en los 2 mejores
   tiempos: se les abre el hueco de la 3ª tanda en su móvil y cuenta su mejor vuelta
   de las dos. El más rápido se lleva tantos puntos como pilotos con tiempo; el

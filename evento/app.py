@@ -226,8 +226,8 @@ def participante_tiempo_karts(token: str):
         guardados += 1
         con_texto += 1 if texto else 0
     if error:
-        flash("Ese tiempo no se entiende: escríbelo como 1:02.45 (minutos:segundos"
-              ".centésimas) o 48.12 si bajaste del minuto.", "error")
+        flash("Ese tiempo no se entiende: escríbelo como 1:02.451 (minutos:segundos"
+              ".milésimas) o 48.123 si bajaste del minuto.", "error")
     elif con_texto:
         flash("¡Tiempo guardado! Ya cuenta en la clasificación.", "ok")
     elif guardados:
