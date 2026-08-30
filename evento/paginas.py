@@ -1188,7 +1188,16 @@ function abrirPestana(nombre, btn){
   var barra = document.getElementById('sin-conexion');
   if (!barra) return;
   function pinta(){ barra.hidden = navigator.onLine !== false; }
-  window.addEventListener('online', function(){ pinta(); location.reload(); });
+  function pendientes(){
+    try { return Object.keys(JSON.parse(
+      localStorage.getItem('nea-pendientes') || '{}')).length; } catch (e) { return 0; }
+  }
+  window.addEventListener('online', function(){
+    pinta();
+    // Si hay tiempos por mandar, recarga el otro bloque cuando los haya enviado:
+    // recargar ahora cortaría el envío a medias.
+    if (!pendientes()) location.reload();
+  });
   window.addEventListener('offline', pinta);
   pinta();
 })();
