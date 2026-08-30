@@ -1104,9 +1104,13 @@ function abrirPestana(nombre, btn){
 // --- La app se instala de verdad: service worker (solo si el navegador lo
 // permite; por http sin más no se registra, y no pasa nada)
 (function(){
-  if (!('serviceWorker' in navigator)) return;
+  // Ojo: en algunos sitios (una página incrustada, o un navegador con esto
+  // apagado) hasta PREGUNTAR por serviceWorker lanza error, de ahí el try.
+  var sw = null;
+  try { sw = navigator.serviceWorker; } catch (e) { return; }
+  if (!sw) return;
   window.addEventListener('load', function(){
-    navigator.serviceWorker.register('/sw.js').catch(function(){});
+    try { sw.register('/sw.js').catch(function(){}); } catch (e) {}
   });
 })();
 
