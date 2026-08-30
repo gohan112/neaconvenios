@@ -148,6 +148,7 @@ def ver_participante(token: str):
     id_lugar_karts = _entero_o_none(cfg.get("karts_lugar_id"))
     lugar_karts = db.lugar(id_lugar_karts) if id_lugar_karts else None
     clasif = db.clasificacion()
+    final = db.estado_final()
     # Al cerrar la Olimpiada, cada uno ve si tiene premio nada más entrar
     premios = db.ganadores(clasif) if (cfg.get("resultado_final") or "").strip() else None
     return paginas.render_participante(
@@ -155,7 +156,9 @@ def ver_participante(token: str):
         agenda=db.agenda_para(p["equipo_id"]), lugares=db.listar_lugares(),
         referencia=db.hoy(), lugar_escape=lugar_escape,
         lugar_karts=lugar_karts, clasif=clasif,
-        hora_actual=_hora_si_es_hoy(cfg), corre_final=db.corre_la_final(p),
+        hora_actual=_hora_si_es_hoy(cfg), corre_final=p["id"] in final["ids"],
+        pasa_por_tiempo=any(x["id"] == p["id"] for x in final["por_tiempo"]),
+        faltan_tiempos=len(final["pendientes"]),
         ganadores=premios, avisos=_avisos(),
     )
 
@@ -176,6 +179,7 @@ def equipo_json(token: str):
     pendientes = len(miembros) - len(dentro)
     return jsonify(dentro=dentro, pendientes=pendientes, color=color,
                    tinta=paginas.color_texto(color),
+                   final=p["id"] in db.estado_final()["ids"],
                    texto=paginas._texto_contador(len(dentro), pendientes))
 
 
@@ -799,6 +803,7 @@ def admin_puntos():
     clasif = db.clasificacion()
     return paginas.render_puntos(
         cfg=db.leer_config(), clasif=clasif, ganadores=db.ganadores(clasif),
+        final=db.estado_final(),
         equipos=db.listar_equipos(), participantes=db.listar_participantes(),
         avisos=_avisos(), sin_password=_sin_password(),
     )

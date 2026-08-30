@@ -609,9 +609,44 @@ def marcar_finalista(participante_id: int, pasa: bool) -> None:
     con.close()
 
 
+def mejor_vuelta(p: dict) -> int | None:
+    """Su mejor vuelta en milisegundos, mirando la de su tanda y la de la final."""
+    tiempos = [x for x in (parsear_tiempo_vuelta(p.get("tiempo_karts") or ""),
+                           parsear_tiempo_vuelta(p.get("tiempo_final") or ""))
+               if x is not None]
+    return min(tiempos) if tiempos else None
+
+
+def estado_final() -> dict:
+    """Quién corre la 3ª tanda (la final) y si eso ya es definitivo.
+
+    Van los que se quedaron fuera de las dos primeras tandas y, por tiempo, los
+    2 mejores. Para no dar una alegría en falso, los 2 mejores no se anuncian
+    hasta que TODOS los de las tandas 1 y 2 tengan su vuelta apuntada; mientras
+    tanto se dice cuántos faltan. Marcar a alguien a mano en el panel manda
+    siempre (por si a alguien se le queda el móvil sin batería).
+    """
+    gente = listar_participantes()
+    pilotos = [p for p in gente if (p.get("tanda") or "").strip() in ("1", "2")]
+    pendientes = [p for p in pilotos if mejor_vuelta(p) is None]
+    cerrado = bool(pilotos) and not pendientes
+    por_tiempo = []
+    if cerrado:
+        ordenados = sorted(pilotos, key=lambda p: mejor_vuelta(p))
+        corte = mejor_vuelta(ordenados[min(1, len(ordenados) - 1)])
+        por_tiempo = [p for p in ordenados if mejor_vuelta(p) <= corte]  # empates dentro
+    ids = {p["id"] for p in gente
+           if (p.get("tanda") or "").strip() == "3" or p.get("finalista")}
+    ids |= {p["id"] for p in por_tiempo}
+    return {"ids": ids, "por_tiempo": por_tiempo, "pendientes": pendientes,
+            "cerrado": cerrado}
+
+
 def corre_la_final(p: dict) -> bool:
     """Corre la 3ª tanda quien se quedó fuera de las dos primeras o clasificó."""
-    return (p.get("tanda") or "").strip() == "3" or bool(p.get("finalista"))
+    if (p.get("tanda") or "").strip() == "3" or p.get("finalista"):
+        return True
+    return p["id"] in estado_final()["ids"]
 
 
 def parsear_hora_dia(texto: str) -> int | None:
@@ -673,12 +708,6 @@ def clasificacion() -> dict:
                            "puntos": 0})
 
     # Karts (individual): de sus dos vueltas posibles cuenta la mejor
-    def mejor_vuelta(p: dict):
-        tiempos = [x for x in (parsear_tiempo_vuelta(p.get("tiempo_karts") or ""),
-                               parsear_tiempo_vuelta(p.get("tiempo_final") or ""))
-                   if x is not None]
-        return min(tiempos) if tiempos else None
-
     corredores = [(p, mejor_vuelta(p)) for p in participantes_]
     ordenados = sorted([x for x in corredores if x[1] is not None], key=lambda x: x[1])
     n = len(ordenados)

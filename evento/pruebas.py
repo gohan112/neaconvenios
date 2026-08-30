@@ -231,48 +231,77 @@ def pon_tanda(persona: dict, valor: str) -> dict:
     return db.participante(persona["id"])
 
 
-piloto = next(p for p in db.listar_participantes()
-              if (p.get("tanda") or "") in ("1", "2"))
-db.marcar_revelado(piloto["id"])
+pilotos = [p for p in db.listar_participantes()
+           if (p.get("tanda") or "").strip() in ("1", "2")]
+# Tiempos a mano: los dos primeros vuelan, el resto van más lentos
+for i, x in enumerate(pilotos):
+    db.poner_tiempo_karts(x["id"], f"0:4{i}.100" if i < 2 else f"1:0{i}.500")
+rapidos, piloto = pilotos[:2], pilotos[2]
+for x in pilotos:
+    db.marcar_revelado(x["id"])
+
 r = c.get(f"/p/{piloto['token']}")
 ok("Tu vuelta en la" in r.text, "cada uno ve el hueco de su tanda")
-ok("Tu vuelta en la final" not in r.text, "sin pasar a la final no hay hueco extra")
-c.post(f"/p/{piloto['token']}/tiempo_karts", data={"tiempo": "1:02.45"})
-ok(db.participante(piloto["id"])["tiempo_karts"] == "1:02.45", "su vuelta se guarda")
+ok("Tu vuelta en la final" not in r.text, "quien no pasa no tiene hueco extra")
+ok("Pasas a la final" not in r.text, "ni enhorabuena")
+
+estado = db.estado_final()
+ok(estado["cerrado"] and [x["id"] for x in estado["por_tiempo"]]
+   == [x["id"] for x in rapidos], "con todos los tiempos, pasan los 2 mejores")
+r = c.get(f"/p/{rapidos[0]['token']}")
+ok("Pasas a la final" in r.text, "y a ellos se lo dice la app, sin que nadie los marque")
+ok("Tu vuelta en la final" in r.text, "con su hueco para la vuelta de la 3ª tanda")
+ok("Has pasado a la final" in r.text, "y el aviso en su programa")
+ok(c.get(f"/p/{rapidos[0]['token']}/equipo.json").json["final"] is True,
+   "el sondeo del móvil lleva la bandera (para enterarse sin recargar)")
+
+# Mientras falte una vuelta por apuntar no se canta nada: sería una alegría en falso
+db.poner_tiempo_karts(piloto["id"], "")
+ok(not db.estado_final()["cerrado"], "sin todos los tiempos, la final no está decidida")
+r = c.get(f"/p/{rapidos[0]['token']}")
+ok("Pasas a la final" not in r.text and "Tu vuelta en la final" not in r.text,
+   "y nadie recibe la enhorabuena todavía")
+ok("falta 1 tiempo por apuntar" in r.text, "se dice cuántos tiempos faltan")
+ok(c.post(f"/p/{rapidos[0]['token']}/tiempo_karts",
+          data={"tiempo_final": "40.0"}).status_code == 403,
+   "y tampoco se puede colar un tiempo de la final")
+c.post(f"/p/{piloto['token']}/tiempo_karts", data={"tiempo": "1:02.500"})
+ok(db.estado_final()["cerrado"], "en cuanto apunta el último, ya está decidida")
+
 r = c.post(f"/p/{piloto['token']}/tiempo_karts", data={"tiempo": "rapidísimo"},
            follow_redirects=True)
 ok("no se entiende" in r.text, "un tiempo mal escrito se rechaza con un aviso")
-ok(db.participante(piloto["id"])["tiempo_karts"] == "1:02.45",
+ok(db.participante(piloto["id"])["tiempo_karts"] == "1:02.500",
    "y no se borra el que ya estaba")
-ok(c.post(f"/p/{piloto['token']}/tiempo_karts",
-          data={"tiempo_final": "40.0"}).status_code == 403,
-   "nadie puede colarse en la final")
 
+# El panel manda: se puede meter a alguien a mano (si se queda sin móvil, p. ej.)
 c.post("/admin/puntos/karts", data={"finalista": str(piloto["id"])})
-piloto = db.participante(piloto["id"])
-ok(db.corre_la_final(piloto), "el panel marca quién pasa a la final")
+ok(db.corre_la_final(db.participante(piloto["id"])),
+   "el panel puede meter a alguien a mano")
 r = c.get(f"/p/{piloto['token']}")
-ok("Tu vuelta en la final" in r.text, "al finalista se le abre el hueco extra")
-ok("Has pasado a la final" in r.text, "y se le avisa en su programa")
+ok("Tu vuelta en la final" in r.text, "y se le abre su hueco igual")
 formulario = r.text.split(
     f'action="/p/{piloto["token"]}/tiempo_karts"')[1].split("</form>")[0]
 ok('name="tiempo"' in formulario and 'name="tiempo_final"' in formulario
    and formulario.count("submit") == 1,
    "las dos vueltas van en el mismo formulario, con un solo Guardar")
 c.post(f"/p/{piloto['token']}/tiempo_karts",
-       data={"tiempo": "1:02.45", "tiempo_final": "0:59.90"})
+       data={"tiempo": "1:02.500", "tiempo_final": "0:39.900"})
 piloto = db.participante(piloto["id"])
-ok(piloto["tiempo_karts"] == "1:02.45" and piloto["tiempo_final"] == "0:59.90",
+ok(piloto["tiempo_karts"] == "1:02.500" and piloto["tiempo_final"] == "0:39.900",
    "las dos vueltas se guardan de una vez, sin pisarse")
 fila = next(f for f in db.clasificacion()["karts"]
             if f["participante"]["id"] == piloto["id"])
-ok(fila["tiempo"] == "0:59.90", "para los puntos cuenta la mejor de las dos")
+ok(fila["tiempo"] == "0:39.900", "para los puntos cuenta la mejor de las dos")
 
 piloto = pon_tanda(piloto, "3")
 r = c.get(f"/p/{piloto['token']}")
 ok("Tu vuelta en la final" in r.text and "Tu vuelta en la 3ª tanda" not in r.text,
    "quien sale ya en la 3ª tanda solo tiene un hueco")
 pon_tanda(piloto, "1")
+
+r = c.get("/admin/puntos")
+ok("pasan a la final" in r.text, "el panel dice quién pasa")
 
 
 # ----------------------------------------- 8. Fin de fiesta: quién tiene premio

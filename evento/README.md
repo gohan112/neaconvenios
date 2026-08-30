@@ -58,11 +58,15 @@ seguridad es copiar ese fichero.
    móvil la hora de salida de su sala de la escape room. La escape reparte
    puntos por orden de salida (editables; 20/10/5 por defecto). En los karts
    **cada piloto mete su propia vuelta** desde su enlace (minutos:segundos.
-   milésimas, `1:02.451`, o `48.123` si bajó del minuto); los 2 que pasan a la
-   final tienen un **hueco extra** para la vuelta de la 3ª tanda y les cuenta
-   la mejor de las dos. Para abrirles ese hueco, marca «pasa a la final» en
-   🏆 Puntos del panel (ahí también puedes corregir o meter tú cualquier
-   tiempo). Cada piloto puntúa por su mejor vuelta: el más rápido tantos
+   milésimas, `1:02.451`, o `48.123` si bajó del minuto). A la 3ª tanda pasan
+   **solos los 2 mejores tiempos** de las dos primeras: en cuanto están todas
+   las vueltas apuntadas, la app se lo dice a ellos en su móvil («¡Pasas a la
+   final!») y les abre un **hueco extra** para esa vuelta, que les cuenta si es
+   mejor que la primera. Mientras falte alguna vuelta no se canta nada (sería
+   una alegría en falso) y se dice cuántas faltan. En 🏆 Puntos del panel ves
+   quién pasa o a quién le falta apuntar, puedes corregir o meter tú cualquier
+   tiempo, y la casilla «pasa a la final» sirve para forzarlo a mano si alguien
+   no puede apuntar el suyo. Cada piloto puntúa por su mejor vuelta: el más rápido tantos
    puntos como pilotos, el último 1 — todas las posiciones cuentan. La
    **clasificación en directo** (escape + karts + total) la ve todo el mundo
    en la pestaña 🏆 de su enlace;

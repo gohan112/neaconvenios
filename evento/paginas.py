@@ -987,6 +987,9 @@ function abrirPestana(nombre, btn){
       var total = d.dentro.length + d.pendientes;
       barra.style.width = (total ? Math.round(d.dentro.length / total * 100) : 0) + '%';
     }
+    // ¿Ha entrado en la final mientras miraba la página? Se recarga sola una
+    // vez para que le salte la enhorabuena y su hueco de la 3ª tanda.
+    if (d.final && !document.getElementById('mi-vuelta-final')) location.reload();
   }
   setInterval(function(){
     fetch(RUTA_EQUIPO).then(function(r){ return r.json(); }).then(pinta)
@@ -1063,6 +1066,8 @@ def render_participante(cfg: dict, p: dict, equipo: dict | None,
                         clasif: dict | None = None,
                         hora_actual: str | None = None,
                         corre_final: bool = False,
+                        pasa_por_tiempo: bool = False,
+                        faltan_tiempos: int = 0,
                         ganadores: dict | None = None,
                         avisos=None) -> str:
     contador = cuenta_atras(cfg.get("fecha", ""), referencia)
@@ -1120,9 +1125,19 @@ def render_participante(cfg: dict, p: dict, equipo: dict | None,
             filas.append(("mi-vuelta-final", "tiempo_final",
                           "Tu vuelta en la final (3ª tanda)", p.get("tiempo_final")))
         campos = _form_vueltas(p["token"], filas)
-        nota_final = ('<p class="silencio" style="margin-bottom:0">Corres dos veces: '
-                      'para los puntos cuenta tu <strong>mejor</strong> vuelta de las '
-                      'dos.</p>' if corre_final and tanda_p != "3" else "")
+        if corre_final and tanda_p != "3":
+            nota_final = ('<p class="silencio" style="margin-bottom:0">Corres dos '
+                          'veces: para los puntos cuenta tu <strong>mejor</strong> '
+                          'vuelta de las dos.</p>')
+        elif tanda_p in ("1", "2") and faltan_tiempos:
+            falta = ("falta 1 tiempo por apuntar"
+                     if faltan_tiempos == 1 else f"faltan {faltan_tiempos} tiempos")
+            nota_final = (f'<p class="silencio" style="margin-bottom:0">Los <strong>2 '
+                          f'mejores</strong> de las dos primeras tandas pasan a la '
+                          f'final. Todavía {falta}: en cuanto estén todos, la app '
+                          f'avisa a quien pasa.</p>')
+        else:
+            nota_final = ""
         tarjeta_vuelta = f"""
 <div class="tarjeta">
   <h2>🏎️ Tu vuelta en los karts</h2>
@@ -1152,12 +1167,17 @@ def render_participante(cfg: dict, p: dict, equipo: dict | None,
         if tanda_p == "3":
             deberes = ('<div>🏎️ <strong>Apunta tu vuelta de la final</strong> aquí '
                        'abajo en cuanto te bajes del kart.</div>')
+            deberes += ('<div>🏁 Contigo corren los <strong>2 mejores tiempos</strong> '
+                        'de las dos primeras tandas.</div>')
         elif corre_final:
             deberes = ('<div>🏎️ <strong>Apunta tus dos vueltas</strong> aquí abajo: '
                        'la de tu tanda y la de la final. Cuenta la mejor.</div>')
         else:
             deberes = ('<div>🏎️ <strong>Apunta tu vuelta</strong> aquí abajo en '
                        'cuanto te bajes del kart.</div>')
+            deberes += ('<div>🏁 Los <strong>2 mejores tiempos</strong> de las dos '
+                        'primeras tandas se van a la final: cuando estén todos los '
+                        'tiempos, la app avisa a quien pasa.</div>')
         if es_capitan:
             deberes += ('<div>👑 <strong>Eres el capitán:</strong> al salir de vuestra '
                         'sala, apunta aquí la hora de salida. Esa solo la puedes meter '
@@ -1285,6 +1305,24 @@ def render_participante(cfg: dict, p: dict, equipo: dict | None,
   {nota_rapida}</p>
   <p class="silencio" style="margin:0">¡Gracias por jugar! Tienes la
   clasificación completa en la pestaña 🏆 Puntos.</p>
+</div>"""
+
+    # Ha pasado a la final por tiempo: se lo dice en cuanto entra (y hasta que
+    # apunte esa vuelta, que es lo que le queda por hacer)
+    if (not banda_final and pasa_por_tiempo
+            and not (p.get("tiempo_final") or "").strip()):
+        confeti_color = color_equipo or "#E8A013"
+        hora_final = (cfg.get("karts_hora3") or "").strip()
+        cuando = f" Es a las {e(hora_final)}." if hora_final else ""
+        banda_final = f"""
+<div class="tarjeta destacada celebracion">
+  <div class="medallon" aria-hidden="true">🏎️</div>
+  <h2>¡Pasas a la final!</h2>
+  <p>Has hecho uno de los <strong>2 mejores tiempos</strong> de las dos primeras
+  tandas, así que vuelves a pista en la <strong>3ª tanda</strong>.{cuando}
+  Prepárate. 🔥</p>
+  <p class="silencio" style="margin-bottom:0">Cuando la corras, apunta esa vuelta
+  en 🏆 Puntos: te cuenta la mejor de las dos.</p>
 </div>"""
 
     # El día del evento lo que hace falta es saber a dónde ir ahora, así que se
@@ -1434,7 +1472,7 @@ def fragmento_clasificacion(clasif: dict, nota: bool = True) -> str:
 
 def render_puntos(cfg: dict, clasif: dict, equipos: list[dict],
                   participantes: list[dict], ganadores: dict | None = None,
-                  avisos=None, sin_password=False) -> str:
+                  final: dict | None = None, avisos=None, sin_password=False) -> str:
     filas_escape = ""
     for eq in equipos:
         capitan = next((nombre_corto(p) for p in participantes
@@ -1450,6 +1488,7 @@ def render_puntos(cfg: dict, clasif: dict, equipos: list[dict],
          placeholder="10:05" size="7" inputmode="numeric" style="width:100px">
 </div>"""
 
+    por_tiempo_ids = {x["id"] for x in (final or {}).get("por_tiempo", [])}
     filas_karts = ""
     for eq in equipos + [None]:
         grupo = [p for p in participantes
@@ -1463,6 +1502,9 @@ def render_puntos(cfg: dict, clasif: dict, equipos: list[dict],
             tanda = (p.get("tanda") or "").strip()
             nombre = e(nombre_corto(p))
             sufijo = f" · {ORDINAL_TANDA[tanda]}" if tanda in ORDINAL_TANDA else ""
+            if p["id"] in por_tiempo_ids:   # ha entrado en la final por tiempo
+                sufijo += (' <span title="Pasa a la final por tiempo" '
+                           'aria-label="pasa a la final">🏁</span>')
             if tanda == "3":     # sale directo en la final: un único hueco
                 columna += (f'<div class="fila-tiempo">'
                             f'<label for="f{p["id"]}">{nombre}{sufijo}</label>'
@@ -1525,6 +1567,23 @@ def render_puntos(cfg: dict, clasif: dict, equipos: list[dict],
   {boton_cierre}{estado}
 </div>"""
 
+    # Cómo va la final: quién pasa ya, o a quién le falta apuntar su vuelta
+    final = final or {"ids": set(), "por_tiempo": [], "pendientes": [], "cerrado": False}
+    if final["cerrado"] and final["por_tiempo"]:
+        pasan = " y ".join(f'<strong>{e(nombre_corto(x))}</strong>'
+                           for x in final["por_tiempo"])
+        aviso_final = (f'<div class="aviso ok">🏁 Ya están todos los tiempos: pasan a '
+                       f'la final {pasan}. Lo tienen ya en su móvil, con su hueco para '
+                       f'la vuelta de la 3ª tanda.</div>')
+    elif final["pendientes"]:
+        quienes = ", ".join(e(nombre_corto(x)) for x in final["pendientes"])
+        cuantos = ("Falta 1 vuelta por apuntar" if len(final["pendientes"]) == 1
+                   else f'Faltan {len(final["pendientes"])} vueltas por apuntar')
+        aviso_final = (f'<div class="aviso">⏳ {cuantos}: {quienes}. Cuando estén '
+                       f'todas, la app avisa sola a los 2 mejores.</div>')
+    else:
+        aviso_final = ""
+
     cuerpo = f"""
 <div class="tarjeta">
   <h2>🏆 Clasificación</h2>
@@ -1552,10 +1611,12 @@ def render_puntos(cfg: dict, clasif: dict, equipos: list[dict],
   enlace (pestaña 🏆 Puntos); aquí puedes corregirla o meterla tú. Formatos válidos:
   <code>48.123</code>, <code>48,3</code> o <code>1:02.451</code> — hasta
   milésimas, tal y como salga en la pantalla del circuito.</p>
-  <p class="silencio">Marca <strong>«pasa a la final»</strong> en los 2 mejores
-  tiempos: se les abre el hueco de la 3ª tanda en su móvil y cuenta su mejor vuelta
-  de las dos. El más rápido se lleva tantos puntos como pilotos con tiempo; el
-  último, 1.</p>
+  <p class="silencio">A la 3ª tanda pasan solos los <strong>2 mejores tiempos</strong>
+  de las dos primeras: en cuanto estén todos apuntados, la app se lo dice a ellos en
+  su móvil. La casilla <strong>«pasa a la final»</strong> es para forzarlo a mano (si
+  alguien no puede apuntar su vuelta, por ejemplo). El más rápido se lleva tantos
+  puntos como pilotos con tiempo; el último, 1.</p>
+  {aviso_final}
   <form method="post" action="/admin/puntos/karts">
     <div class="rejilla-tiempos">{filas_karts}</div>
     <div style="margin-top:var(--e4)">
