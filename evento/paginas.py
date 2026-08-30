@@ -1953,6 +1953,11 @@ def _preparativos(cfg: dict, datos: dict, sin_password: bool) -> str:
          "Fijar la URL pública antes de repartir enlaces", "/admin/evento", "Evento"),
         (not sin_password, "Panel protegido con contraseña" if not sin_password else
          "Poner contraseña al panel (EVENTO_ADMIN_PASSWORD)", "", ""),
+        ((cfg.get("url_base") or "").startswith("https://"),
+         "Va por https: se puede instalar como app y sin avisos del navegador"
+         if (cfg.get("url_base") or "").startswith("https://") else
+         "Opcional: pasar a https (bash deploy/https.sh) para que se instale "
+         "como app de verdad", "", ""),
         (n > 0 and datos["han_abierto"] >= n,
          f"Enlaces abiertos por {datos['han_abierto']} de {n}" if n else
          "Repartir los enlaces personales", "/admin/enlaces", "Enlaces"),
