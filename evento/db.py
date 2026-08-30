@@ -664,6 +664,8 @@ def parsear_tiempo_vuelta(texto: str) -> int | None:
         return None
     minutos = int(m.group(1) or 0)
     segundos = int(m.group(2))
+    if m.group(1) and segundos > 59:
+        return None            # «1:75» no es una vuelta: son minutos y segundos
     fraccion = (m.group(3) or "").ljust(3, "0")[:3]
     return (minutos * 60 + segundos) * 1000 + int(fraccion or 0)
 

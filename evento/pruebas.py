@@ -147,6 +147,15 @@ ok(db.parsear_tiempo_vuelta("34.567") == 34567 and db.parsear_tiempo_vuelta("34.
 ok(db.parsear_tiempo_vuelta("1'02.451") == 62451, "también con apóstrofo, como el circuito")
 ok(db.parsear_tiempo_vuelta("48.123") < db.parsear_tiempo_vuelta("48.124"),
    "una milésima decide quién va delante")
+ok(db.parsear_tiempo_vuelta("1:75") is None and db.parsear_tiempo_vuelta("99:99") is None,
+   "un tiempo imposible (más de 59 segundos con minutos delante) no cuela")
+
+# --- guardarla en el móvil: el service worker y el aviso del tutorial
+r = c.get("/sw.js")
+ok(r.status_code == 200 and "javascript" in r.headers.get("Content-Type", ""),
+   "el service worker se sirve desde la raíz (para que valga en toda la app)")
+ok("caches" in r.text and "SIN_CONEXION" in r.text,
+   "y guarda la última página para cuando no haya cobertura")
 ok(db.parsear_hora_dia("10:05") == 36300, "se entiende una hora de salida 10:05")
 ok(db.parsear_tiempo_vuelta("lo que sea") is None, "un texto raro no puntúa")
 

@@ -297,6 +297,17 @@ def confirmar_asistencia(token: str):
     return redirect(f"/p/{token}")
 
 
+@app.get("/sw.js")
+def service_worker():
+    """El guion que hace que la app funcione con mala cobertura.
+
+    Va en la raíz a propósito: así puede ocuparse de todas las páginas de
+    participante. Los navegadores solo lo aceptan por https (o en localhost)."""
+    return Response(paginas.GUION_SW, mimetype="text/javascript",
+                    headers={"Cache-Control": "no-cache",
+                             "Service-Worker-Allowed": "/"})
+
+
 @app.get("/salud")
 def salud():
     return jsonify(ok=True)

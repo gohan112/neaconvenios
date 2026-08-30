@@ -721,6 +721,8 @@ def render_sorteo(cfg: dict, p: dict, equipos: list[dict], indice_final: int,
     <h2 style="font-size:22px">¡Estás en el equipo
     {e(equipo_final.get('emoji'))} {e(equipo_final['nombre'])}!</h2>
     <a class="boton" href="/p/{e(p['token'])}">Ver mi equipo y el programa →</a>
+    <p class="silencio" style="margin-top:var(--e3);font-size:14px">📲 Dentro te
+    explica cómo guardarlo en el móvil para no perder el enlace.</p>
   </div>
 
   <noscript>
@@ -925,6 +927,76 @@ def _bloque_lugares(lugares: list[dict]) -> str:
     return f'<div class="tarjeta"><h2>📍 Lugares</h2>{tarjetas}</div>'
 
 
+# El «service worker»: lo que convierte la web en una app de verdad. Guarda la
+# última página que vio cada uno, así que si en el karting o en la escape room
+# no hay cobertura, al abrir el icono sigue viendo su equipo, su sala y su
+# tanda (con un aviso de que está sin conexión). Los envíos nunca se cachean.
+GUION_SW = """
+var VERSION = 'neaevento-1';
+var BASICOS = ['/assets/icono-192.png', '/assets/icono-512.png'];
+
+self.addEventListener('install', function(ev){
+  ev.waitUntil(caches.open(VERSION)
+    .then(function(c){ return c.addAll(BASICOS); })
+    .catch(function(){})
+    .then(function(){ return self.skipWaiting(); }));
+});
+
+self.addEventListener('activate', function(ev){
+  ev.waitUntil(caches.keys().then(function(claves){
+    return Promise.all(claves.map(function(k){
+      if (k !== VERSION) return caches.delete(k);
+    }));
+  }).then(function(){ return self.clients.claim(); }));
+});
+
+function guardable(url, req){
+  if (url.pathname.indexOf('/admin') === 0) return false;   // el panel, nunca
+  return req.mode === 'navigate' || url.pathname.indexOf('/assets/') === 0
+         || url.pathname.indexOf('/manifest') > -1;
+}
+
+var SIN_CONEXION = '<!doctype html><html lang=es><meta charset=utf-8>'
+  + '<meta name=viewport content="width=device-width,initial-scale=1">'
+  + '<title>Sin conexión</title><body style="margin:0;font:16px/1.5 system-ui;'
+  + 'background:#F5F5F3;color:#1A1A1A;display:grid;place-items:center;height:100vh">'
+  + '<div style="text-align:center;padding:24px;max-width:420px">'
+  + '<div style="font-size:44px">📶</div><h1 style="font-size:22px">Sin conexión</h1>'
+  + '<p style="color:#5A5A5A">No hay cobertura ahora mismo. Vuelve a intentarlo en '
+  + 'un momento: en cuanto haya señal, tu página aparece sola.</p>'
+  + '<button onclick="location.reload()" style="font:inherit;font-weight:700;'
+  + 'background:#CC0C18;color:#fff;border:0;border-radius:12px;padding:12px 20px">'
+  + 'Reintentar</button></div>';
+
+self.addEventListener('fetch', function(ev){
+  var req = ev.request;
+  if (req.method !== 'GET') return;              // guardar un tiempo va a la red
+  var url;
+  try { url = new URL(req.url); } catch (e) { return; }
+  if (url.origin !== self.location.origin) return;
+  if (url.pathname.indexOf('/admin') === 0) return;
+  ev.respondWith(
+    fetch(req).then(function(res){
+      if (res && res.ok && guardable(url, req)){
+        var copia = res.clone();
+        caches.open(VERSION).then(function(c){ c.put(req, copia); }).catch(function(){});
+      }
+      return res;
+    }).catch(function(){
+      return caches.match(req).then(function(guardada){
+        if (guardada) return guardada;
+        if (req.mode === 'navigate'){
+          return new Response(SIN_CONEXION,
+            {headers: {'Content-Type': 'text/html; charset=utf-8'}, status: 200});
+        }
+        return Response.error();
+      });
+    })
+  );
+});
+"""
+
+
 GUION_PARTICIPANTE = """
 // --- Pestañas: el nombre va en la dirección (#programa), así que al volver de
 // un formulario o al recargar se sigue viendo la misma pestaña.
@@ -1027,6 +1099,25 @@ function abrirPestana(nombre, btn){
     document.body.appendChild(s);
     (function(el){ setTimeout(function(){ el.remove(); }, 1400); })(s);
   }
+})();
+
+// --- La app se instala de verdad: service worker (solo si el navegador lo
+// permite; por http sin más no se registra, y no pasa nada)
+(function(){
+  if (!('serviceWorker' in navigator)) return;
+  window.addEventListener('load', function(){
+    navigator.serviceWorker.register('/sw.js').catch(function(){});
+  });
+})();
+
+// --- Aviso cuando se está viendo una copia guardada (sin cobertura)
+(function(){
+  var barra = document.getElementById('sin-conexion');
+  if (!barra) return;
+  function pinta(){ barra.hidden = navigator.onLine !== false; }
+  window.addEventListener('online', function(){ pinta(); location.reload(); });
+  window.addEventListener('offline', pinta);
+  pinta();
 })();
 
 // --- Guardarlo en la pantalla de inicio: cada móvil lo hace a su manera, y
@@ -1244,6 +1335,9 @@ def render_participante(cfg: dict, p: dict, equipo: dict | None,
         else:
             deberes += ('<div>🗝️ La hora de salida de la escape room la apunta '
                         'vuestro capitán (👑): tú, tranquilo.</div>')
+        deberes += ('<div>📲 <strong>Guarda esto en tu pantalla de inicio</strong>: '
+                    'te queda como una app, se abre en tu página y funciona aunque '
+                    'haya poca cobertura.</div>')
         tarjeta_reglas = f"""
 <div class="tarjeta">
   <h2>🏆 Cómo se ganan los puntos</h2>
@@ -1398,6 +1492,9 @@ def render_participante(cfg: dict, p: dict, equipo: dict | None,
                      f' onclick="abrirPestana(\'{clave}\', this)">{etiqueta}</button>')
 
     cuerpo = f"""
+<div class="aviso" id="sin-conexion" role="status" hidden
+     style="margin-top:var(--e3)">📶 <strong>Sin conexión.</strong> Esto es lo
+     último que vimos; en cuanto vuelva la cobertura se actualiza solo.</div>
 <div class="etiqueta" style="margin-top:var(--e4)">{e(cfg.get('nombre'))}</div>
 <h1 style="margin-top:0">¡Hola, {e(nombre_pila)}! 👋</h1>
 <div class="meta">
@@ -1408,6 +1505,15 @@ def render_participante(cfg: dict, p: dict, equipo: dict | None,
 {"" if banda_final else bienvenida}
 {banda_final}
 {_bloque_asistencia(p, cfg) if not banda_final else ""}
+<div class="tarjeta" id="instalar" hidden>
+  <h2>📲 Tenlo a mano todo el día</h2>
+  <p class="silencio" id="instalar-texto" style="margin-bottom:var(--e3)"></p>
+  <div class="acciones">
+    <button class="boton" id="instalar-boton" type="button" hidden>Instalar</button>
+    <button class="boton secundario mini" id="instalar-no" type="button">Ya está,
+      gracias</button>
+  </div>
+</div>
 <nav class="pestanas" role="tablist" aria-label="Secciones">{pestanas}</nav>
 <div class="panel-pestana{' activa' if inicial == 'equipo' else ''}"
      id="panel-equipo" role="tabpanel">
@@ -1424,15 +1530,6 @@ def render_participante(cfg: dict, p: dict, equipo: dict | None,
 </div>
 <div class="panel-pestana" id="panel-lugares" role="tabpanel">
   {panel_lugares}
-</div>
-<div class="tarjeta" id="instalar" hidden>
-  <h2>📲 Tenlo a mano</h2>
-  <p class="silencio" id="instalar-texto" style="margin-bottom:var(--e3)"></p>
-  <div class="acciones">
-    <button class="boton" id="instalar-boton" type="button" hidden>Instalar</button>
-    <button class="boton secundario mini" id="instalar-no" type="button">Ya está,
-      gracias</button>
-  </div>
 </div>
 {contacto}
 <div class="pie">Nea Master · NeaEvento</div>
