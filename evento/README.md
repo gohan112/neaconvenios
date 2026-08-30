@@ -102,6 +102,11 @@ cobertura: enseña la última página que vio esa persona (equipo, sala, tanda)
 con un aviso de «sin conexión», y se recupera sola en cuanto vuelve la señal.
 Los navegadores solo lo activan por **https** (o en localhost).
 
+Y lo más importante para el día: **si alguien guarda su tiempo sin cobertura no
+lo pierde**. El móvil se lo queda apuntado, avisa abajo («tienes un tiempo sin
+enviar») y lo manda solo en cuanto vuelve la señal — vale igual para la vuelta
+de karts y para la hora de salida del capitán. Esto funciona sin https.
+
 ### Https en un rato, y ya es app de verdad
 
 ```bash

@@ -384,6 +384,10 @@ input[type=checkbox]{width:18px;height:18px;min-height:0;flex:none;padding:0;
                      accent-color:var(--rojo);cursor:pointer}
 
 [hidden]{display:none !important}
+/* El aviso de «tienes un tiempo sin enviar» se queda a la vista, abajo del
+   todo: es lo único que le falta por hacer y no puede pasar desapercibido */
+#pendientes{position:fixed;left:12px;right:12px;bottom:12px;z-index:60;margin:0;
+            max-width:520px;margin-inline:auto;box-shadow:0 12px 30px rgba(0,0,0,.2)}
 
 /* Utilidades y varios */
 .acciones{display:flex;gap:var(--e2);flex-wrap:wrap;align-items:center}
@@ -1114,6 +1118,66 @@ function abrirPestana(nombre, btn){
   });
 })();
 
+// --- Sin cobertura al guardar un tiempo: se queda apuntado en el móvil y se
+// manda solo en cuanto vuelve la señal. Nadie pierde su vuelta por estar en un
+// sótano (que es justo donde están la escape room y los boxes del karting).
+(function(){
+  var LLAVE = 'nea-pendientes';
+  var avisos = document.getElementById('pendientes');
+
+  function guardadas(){
+    try { return JSON.parse(localStorage.getItem(LLAVE) || '{}'); }
+    catch (e) { return {}; }
+  }
+  function apunta(mapa){
+    try { localStorage.setItem(LLAVE, JSON.stringify(mapa)); } catch (e) {}
+  }
+  function pinta(){
+    if (!avisos) return;
+    var cuantas = Object.keys(guardadas()).length;
+    avisos.hidden = cuantas === 0;
+  }
+
+  document.addEventListener('submit', function(ev){
+    var form = ev.target;
+    if (!form.action || !/\/(tiempo_karts|tiempo_escape)$/.test(form.action)) return;
+    if (navigator.onLine !== false) return;          // hay señal: envío normal
+    ev.preventDefault();
+    var datos = {};
+    new FormData(form).forEach(function(valor, clave){ datos[clave] = valor; });
+    var mapa = guardadas();
+    mapa[form.action] = datos;                        // solo el último de cada uno
+    apunta(mapa);
+    pinta();
+  }, true);
+
+  function manda(){
+    var mapa = guardadas();
+    var acciones = Object.keys(mapa);
+    if (!acciones.length || navigator.onLine === false || !window.fetch) return;
+    var quedan = acciones.length, hubo = false;
+    acciones.forEach(function(url){
+      var cuerpo = new URLSearchParams(mapa[url]).toString();
+      fetch(url, {method: 'POST', body: cuerpo, headers:
+                  {'Content-Type': 'application/x-www-form-urlencoded'}})
+        .then(function(r){
+          if (r.ok || r.status === 302){
+            var m = guardadas(); delete m[url]; apunta(m); hubo = true;
+          }
+        })
+        .catch(function(){})
+        .then(function(){
+          quedan -= 1;
+          if (quedan === 0){ pinta(); if (hubo) location.reload(); }
+        });
+    });
+  }
+
+  window.addEventListener('online', manda);
+  manda();          // por si quedó algo de la última vez
+  pinta();
+})();
+
 // --- Aviso cuando se está viendo una copia guardada (sin cobertura)
 (function(){
   var barra = document.getElementById('sin-conexion');
@@ -1496,6 +1560,10 @@ def render_participante(cfg: dict, p: dict, equipo: dict | None,
                      f' onclick="abrirPestana(\'{clave}\', this)">{etiqueta}</button>')
 
     cuerpo = f"""
+<div class="aviso" id="pendientes" role="status" hidden
+     style="margin-top:var(--e3)">📝 <strong>Tienes un tiempo sin enviar.</strong>
+     No hay cobertura: lo guardo aquí y lo mando solo en cuanto vuelva la señal.
+     No cierres la app.</div>
 <div class="aviso" id="sin-conexion" role="status" hidden
      style="margin-top:var(--e3)">📶 <strong>Sin conexión.</strong> Esto es lo
      último que vimos; en cuanto vuelva la cobertura se actualiza solo.</div>
