@@ -985,7 +985,7 @@ self.addEventListener('fetch', function(ev){
     }).catch(function(){
       return caches.match(req).then(function(guardada){
         if (guardada) return guardada;
-        if (req.mode === 'navigate'){
+        if (req.mode === 'navigate' || req.destination === 'document'){
           return new Response(SIN_CONEXION,
             {headers: {'Content-Type': 'text/html; charset=utf-8'}, status: 200});
         }

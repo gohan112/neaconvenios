@@ -97,9 +97,24 @@ color de su equipo. La app se lo propone sola la primera vez (y no insiste si
 dice que no o si ya la tiene). No hace falta tienda de aplicaciones ni instalar
 nada.
 
-Con la app publicada por **http** eso es un acceso directo, que es justo lo que
-hace falta para no perder el enlace. Sirviéndola por **https** (un dominio y un
-certificado) Android ofrecería además el «Instalar aplicación» de verdad.
+La app lleva su **service worker**, así que una vez abierta funciona con mala
+cobertura: enseña la última página que vio esa persona (equipo, sala, tanda)
+con un aviso de «sin conexión», y se recupera sola en cuanto vuelve la señal.
+Los navegadores solo lo activan por **https** (o en localhost).
+
+### Https en un rato, y ya es app de verdad
+
+```bash
+cd ~/neaevento && bash evento/deploy/https.sh
+```
+
+Instala Caddy, pide un certificado gratis de Let's Encrypt para un dominio del
+tipo `13.38.46.216.nip.io` (no hay que comprar ni configurar nada: ese dominio
+ya apunta a la IP), deja la app detrás y fija la URL pública en el evento.
+Antes hay que abrir los **puertos 80 y 443** en Lightsail («Networking»). Con
+eso desaparece el aviso de «sitio no seguro», Android ofrece «Instalar
+aplicación» y el service worker entra en juego. Los enlaces repartidos por
+`http://IP:8502` siguen valiendo: la app sigue escuchando ahí.
 
 El participante no necesita contraseña ni instalar nada: solo abrir su enlace
 en el móvil.
