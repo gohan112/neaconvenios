@@ -65,7 +65,9 @@ CONFIG_DEFECTO = {
     "contacto": "",
     "msg_whatsapp": "¡Hola, {nombre}! Este es tu enlace personal para el evento: {enlace}\n"
                     "Dentro verás tu equipo, el programa del día y los lugares. "
-                    "¡Entra y confirma tu asistencia!",
+                    "¡Entra y confirma tu asistencia!\n"
+                    "Guárdalo en la pantalla de inicio del móvil (te dice cómo "
+                    "nada más entrar): así lo tienes a mano el sábado.",
 }
 
 ESQUEMA = """
