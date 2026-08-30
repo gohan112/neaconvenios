@@ -286,8 +286,10 @@ db.marcar_revelado(rapido["id"])
 r = c.get(f"/p/{rapido['token']}")
 ok("premio en los postres" in r.text, "el más rápido también tiene premio")
 
+# alguien que no gane nada: ni equipo campeón (puede haber empate) ni vuelta rápida
+ganadores_ = {x["id"] for x in premios["equipos"]}
 perdedor = next((x for x in db.listar_participantes()
-                 if x["equipo_id"] and x["equipo_id"] != campeon["id"]
+                 if x["equipo_id"] and x["equipo_id"] not in ganadores_
                  and x["id"] not in [y["id"] for y in premios["pilotos"]]), None)
 if perdedor:
     db.marcar_revelado(perdedor["id"])

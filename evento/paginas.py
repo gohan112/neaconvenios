@@ -522,7 +522,9 @@ GUION_SORTEO = """
     try { if (navigator.vibrate) navigator.vibrate([90, 40, 140]); } catch (e) {}
     confeti(EQUIPOS[FINAL].color);
     resultado.style.display = 'block';
-    try { fetch(RUTA_REVELADO, {method: 'POST', keepalive: true}); } catch (e) {}
+    // el .catch hace falta: si falla la red, un try/catch no atrapa la promesa
+    try { fetch(RUTA_REVELADO, {method: 'POST', keepalive: true})
+            .catch(function(){}); } catch (e) {}
   }
   boton.addEventListener('click', function(){
     boton.style.display = 'none';
