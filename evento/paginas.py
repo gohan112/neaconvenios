@@ -1080,10 +1080,15 @@ function abrirPestana(nombre, btn){
     // vez para que le salte la enhorabuena y su hueco de la 3ª tanda.
     if (d.final && !document.getElementById('mi-vuelta-final')) location.reload();
   }
-  setInterval(function(){
+  function mira(){
+    if (document.hidden) return;      // con la pantalla apagada no se gasta batería
     fetch(RUTA_EQUIPO).then(function(r){ return r.json(); }).then(pinta)
       .catch(function(){});
-  }, 6000);
+  }
+  setInterval(mira, 6000);
+  document.addEventListener('visibilitychange', function(){
+    if (!document.hidden) mira();     // al volver a mirar el móvil, al día
+  });
 })();
 
 // --- Confeti para quien tiene premio (una vez, y solo si no pidió menos
@@ -1238,11 +1243,16 @@ function abrirPestana(nombre, btn){
 (function(){
   var zona = document.getElementById('zona-puntos');
   if (!zona || !window.fetch || !window.RUTA_PUNTOS) return;
-  setInterval(function(){
+  function refresca(){
+    if (document.hidden) return;
     fetch(RUTA_PUNTOS).then(function(r){ return r.text(); }).then(function(html){
       zona.innerHTML = html;
     }).catch(function(){});
-  }, 12000);
+  }
+  setInterval(refresca, 12000);
+  document.addEventListener('visibilitychange', function(){
+    if (!document.hidden) refresca();
+  });
 })();
 """
 

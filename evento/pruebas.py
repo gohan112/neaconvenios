@@ -149,6 +149,8 @@ ok(db.parsear_tiempo_vuelta("48.123") < db.parsear_tiempo_vuelta("48.124"),
    "una milésima decide quién va delante")
 ok(db.parsear_tiempo_vuelta("1:75") is None and db.parsear_tiempo_vuelta("99:99") is None,
    "un tiempo imposible (más de 59 segundos con minutos delante) no cuela")
+ok(db.parsear_tiempo_vuelta("1'02\"451") == 62451,
+   "y también el formato con comillas de algunas pantallas de circuito")
 
 # --- guardarla en el móvil: el service worker y el aviso del tutorial
 r = c.get("/sw.js")

@@ -659,7 +659,9 @@ def parsear_hora_dia(texto: str) -> int | None:
 
 def parsear_tiempo_vuelta(texto: str) -> int | None:
     """'48.123', '48,3', '1:02.451' o '62' → milisegundos (para ordenar vueltas)."""
-    m = re.fullmatch(r"\s*(?:(\d+)[:'])?(\d{1,3})(?:[.,](\d{1,3}))?\s*", texto or "")
+    # Se admite lo que imprimen los circuitos: 1:02.451, 1'02.451 y 1'02"451
+    m = re.fullmatch(r"""\s*(?:(\d+)[:'])?(\d{1,3})(?:[.,"](\d{1,3}))?\s*""",
+                     texto or "")
     if not m:
         return None
     minutos = int(m.group(1) or 0)
