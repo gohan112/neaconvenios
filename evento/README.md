@@ -87,6 +87,20 @@ En **📊 Resumen** hay una lista de **Preparativos** que dice, con ✓ y ⬜, q
 está listo y qué falta (equipos, capitanes, salas, tandas, URL, contraseña,
 enlaces abiertos), con enlace directo a lo que queda pendiente.
 
+### En la pantalla de inicio, como una app
+
+Cada página de participante trae su propio **manifiesto** (`/p/<token>/
+manifest.webmanifest`), así que quien le dé a «Añadir a pantalla de inicio»
+—en iPhone desde *Compartir*, en Android desde el menú del navegador— se queda
+con un icono que abre **su** página directamente, a pantalla completa y con el
+color de su equipo. La app se lo propone sola la primera vez (y no insiste si
+dice que no o si ya la tiene). No hace falta tienda de aplicaciones ni instalar
+nada.
+
+Con la app publicada por **http** eso es un acceso directo, que es justo lo que
+hace falta para no perder el enlace. Sirviéndola por **https** (un dominio y un
+certificado) Android ofrecería además el «Instalar aplicación» de verdad.
+
 El participante no necesita contraseña ni instalar nada: solo abrir su enlace
 en el móvil.
 

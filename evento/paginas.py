@@ -383,6 +383,8 @@ fieldset{border:0;margin:0;padding:0}
 input[type=checkbox]{width:18px;height:18px;min-height:0;flex:none;padding:0;
                      accent-color:var(--rojo);cursor:pointer}
 
+[hidden]{display:none !important}
+
 /* Utilidades y varios */
 .acciones{display:flex;gap:var(--e2);flex-wrap:wrap;align-items:center}
 details summary{cursor:pointer;color:var(--gris);font-size:14px;margin-top:var(--e2);
@@ -567,12 +569,22 @@ function copiar(btn){
 
 
 def base(titulo: str, cuerpo: str, *, admin: bool = False, avisos=None,
-         acento: str | None = None) -> str:
+         acento: str | None = None, manifiesto: str = "") -> str:
     """
     Envoltorio común de todas las páginas. `acento` tiñe la interfaz con el
     color del equipo del participante (línea de la cabecera, pestañas, horas…).
     """
     favicon = '<link rel="icon" href="/assets/neamaster_icono.png">' if HAY_ICONO else ""
+    # Guardarla en la pantalla de inicio: el manifiesto es de cada participante,
+    # así el icono abre su enlace. En iPhone hacen falta las etiquetas de Apple.
+    apps = ""
+    if manifiesto:
+        apps = (f'<link rel="manifest" href="{e(manifiesto)}">'
+                f'<link rel="apple-touch-icon" href="/assets/icono-192.png">'
+                f'<meta name="apple-mobile-web-app-capable" content="yes">'
+                f'<meta name="apple-mobile-web-app-status-bar-style" content="default">'
+                f'<meta name="apple-mobile-web-app-title" content="{e(titulo)}">'
+                f'<meta name="mobile-web-app-capable" content="yes">')
     logo = ('<img src="/assets/neamaster_horizontal.png" alt="Nea Master">'
             if HAY_LOGO else "")
     html_avisos = ""
@@ -596,7 +608,7 @@ def base(titulo: str, cuerpo: str, *, admin: bool = False, avisos=None,
 <meta name="robots" content="noindex">
 <meta name="description" content="{e(titulo)} — Nea Master">
 <title>{e(titulo)}</title>
-{favicon}
+{favicon}{apps}
 <style>{ESTILO}</style>{estilo_acento}
 <script>{GUION}</script>
 </head>
@@ -726,7 +738,8 @@ var RUTA_REVELADO = {json.dumps(ruta_revelado)};
 {GUION_SORTEO}
 </script>
 """
-    return base(cfg.get("nombre", "Evento"), cuerpo, avisos=avisos)
+    return base(cfg.get("nombre", "Evento"), cuerpo, avisos=avisos,
+                manifiesto=f"/p/{p['token']}/manifest.webmanifest")
 
 
 def _bloque_asistencia(p: dict, cfg: dict) -> str:
@@ -1014,6 +1027,52 @@ function abrirPestana(nombre, btn){
     document.body.appendChild(s);
     (function(el){ setTimeout(function(){ el.remove(); }, 1400); })(s);
   }
+})();
+
+// --- Guardarlo en la pantalla de inicio: cada móvil lo hace a su manera, y
+// quien ya lo tenga guardado (o diga que no) no vuelve a verlo.
+(function(){
+  var caja = document.getElementById('instalar');
+  if (!caja) return;
+  var yaEsApp = false;
+  try {
+    yaEsApp = (window.matchMedia && matchMedia('(display-mode: standalone)').matches)
+              || window.navigator.standalone === true;
+  } catch (e) {}
+  var dijoQueNo = false;
+  try { dijoQueNo = localStorage.getItem('nea-instalar') === 'no'; } catch (e) {}
+  if (yaEsApp || dijoQueNo) return;
+
+  var texto = document.getElementById('instalar-texto');
+  var boton = document.getElementById('instalar-boton');
+  var esIOS = /iphone|ipad|ipod/i.test(navigator.userAgent || '');
+  texto.innerHTML = esIOS
+    ? 'Dale a <strong>Compartir</strong> (el cuadrado con la flecha ↑) y luego a '
+      + '<strong>«Añadir a pantalla de inicio»</strong>. Te queda como una app y '
+      + 'ya no tienes que buscar el enlace.'
+    : 'Abre el <strong>menú del navegador</strong> (⋮) y dale a <strong>«Añadir a '
+      + 'pantalla de inicio»</strong>. Te queda como una app y ya no tienes que '
+      + 'buscar el enlace.';
+  caja.hidden = false;
+
+  var pendiente = null;
+  window.addEventListener('beforeinstallprompt', function(ev){
+    ev.preventDefault();
+    pendiente = ev;
+    boton.hidden = false;
+    texto.innerHTML = 'Guárdate la Olimpiada como una app en el móvil: se abre '
+      + 'directa en tu página y no tienes que buscar el enlace.';
+  });
+  boton.addEventListener('click', function(){
+    if (!pendiente) return;
+    pendiente.prompt();
+    pendiente = null;
+    boton.hidden = true;
+  });
+  document.getElementById('instalar-no').addEventListener('click', function(){
+    caja.hidden = true;
+    try { localStorage.setItem('nea-instalar', 'no'); } catch (e) {}
+  });
 })();
 
 // --- La clasificación también se refresca sola
@@ -1366,6 +1425,15 @@ def render_participante(cfg: dict, p: dict, equipo: dict | None,
 <div class="panel-pestana" id="panel-lugares" role="tabpanel">
   {panel_lugares}
 </div>
+<div class="tarjeta" id="instalar" hidden>
+  <h2>📲 Tenlo a mano</h2>
+  <p class="silencio" id="instalar-texto" style="margin-bottom:var(--e3)"></p>
+  <div class="acciones">
+    <button class="boton" id="instalar-boton" type="button" hidden>Instalar</button>
+    <button class="boton secundario mini" id="instalar-no" type="button">Ya está,
+      gracias</button>
+  </div>
+</div>
 {contacto}
 <div class="pie">Nea Master · NeaEvento</div>
 <script>
@@ -1376,7 +1444,8 @@ var COLOR_PREMIO = {json.dumps(confeti_color)};
 </script>
 """
     return base(cfg.get("nombre", "Evento"), cuerpo, avisos=avisos,
-                acento=color_equipo)
+                acento=color_equipo,
+                manifiesto=f"/p/{p['token']}/manifest.webmanifest")
 
 
 # ================================================================== admin

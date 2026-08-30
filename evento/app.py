@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import csv
 import io
+import json
 import os
 import re
 from functools import wraps
@@ -199,6 +200,39 @@ def capitan_tiempo_escape(token: str):
         db.poner_tiempo_escape(equipo["id"], texto)
         flash("¡Hora de salida guardada! Ya cuenta en la clasificación.", "ok")
     return redirect(f"/p/{token}#puntos")  # vuelve a la pestaña de puntos
+
+
+@app.get("/p/<token>/manifest.webmanifest")
+def manifiesto(token: str):
+    """El «carnet» de la app para ese participante.
+
+    Cada uno tiene el suyo con su enlace dentro (`start_url`), así el icono que
+    se guarda en la pantalla de inicio abre SU página, no la portada."""
+    p = db.participante_por_token(token)
+    if not p:
+        abort(404)
+    cfg = db.leer_config()
+    equipo = db.equipo(p["equipo_id"]) if p["equipo_id"] else None
+    color = (equipo or {}).get("color") or "#CC0C18"
+    datos = {
+        "name": cfg.get("nombre") or "Evento",
+        "short_name": (cfg.get("nombre") or "Evento").split()[0][:12],
+        "start_url": f"/p/{token}",
+        "scope": f"/p/{token}",
+        "display": "standalone",
+        "orientation": "portrait",
+        "lang": "es",
+        "background_color": "#F5F5F3",
+        "theme_color": color,
+        "icons": [
+            {"src": "/assets/icono-192.png", "sizes": "192x192", "type": "image/png"},
+            {"src": "/assets/icono-512.png", "sizes": "512x512", "type": "image/png"},
+            {"src": "/assets/icono-maskable.png", "sizes": "512x512",
+             "type": "image/png", "purpose": "maskable"},
+        ],
+    }
+    return Response(json.dumps(datos, ensure_ascii=False),
+                    mimetype="application/manifest+json")
 
 
 @app.get("/p/<token>/puntos.html")

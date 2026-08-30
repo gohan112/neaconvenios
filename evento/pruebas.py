@@ -206,6 +206,27 @@ r = c.get("/assets/neamaster_horizontal.png")
 ok(r.status_code == 200 and "no-store" not in r.headers.get("Cache-Control", ""),
    "pero el logo sí se puede guardar (no se descarga cada vez)")
 
+# ---- guardarla en la pantalla de inicio (cada uno con su enlace dentro)
+r = c.get(f"/p/{capitan['token']}")
+ok(f'href="/p/{capitan["token"]}/manifest.webmanifest"' in r.text,
+   "la página trae su manifiesto para la pantalla de inicio")
+ok('apple-touch-icon' in r.text and 'apple-mobile-web-app-capable' in r.text,
+   "y las etiquetas que necesita el iPhone")
+r = c.get(f"/p/{capitan['token']}/manifest.webmanifest")
+manifiesto = r.get_json(force=True)
+ok(r.status_code == 200 and "manifest" in r.headers.get("Content-Type", ""),
+   "el manifiesto se sirve con su tipo")
+ok(manifiesto["start_url"] == f"/p/{capitan['token']}",
+   "el icono abrirá SU página, no la portada")
+ok(manifiesto["display"] == "standalone" and manifiesto["icons"],
+   "se abre como una app y con icono")
+ok(any(i.get("purpose") == "maskable" for i in manifiesto["icons"]),
+   "hay icono recortable, para que Android no lo estropee")
+for icono in manifiesto["icons"]:
+    ok(c.get(icono["src"]).status_code == 200, f"el icono {icono['src']} existe")
+ok(c.get("/p/inventado/manifest.webmanifest").status_code == 404,
+   "un enlace inventado tampoco tiene manifiesto")
+
 r = c.get(f"/p/{capitan['token']}/equipo.json")
 ok(r.status_code == 200 and r.json["dentro"], "el equipo se puede consultar en directo")
 ok(c.get("/p/inventado").status_code == 404, "un enlace inventado no existe")
