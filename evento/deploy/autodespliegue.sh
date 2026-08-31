@@ -11,7 +11,10 @@
 set -euo pipefail
 
 PROYECTO="${1:-$(gcloud config get-value project 2>/dev/null || true)}"
-REGION="${REGION:-europe-west1}"
+REGION="${REGION:-europe-west1}"          # donde vive la app (Cloud Run)
+# El disparador va aparte: la conexión con GitHub se hace en «global», que es
+# lo que ofrece la consola por defecto, y ahí tiene que vivir también él.
+REGION_DISPARADOR="${REGION_DISPARADOR:-global}"
 SERVICIO="${SERVICIO:-neaevento}"
 DUENO="${DUENO:-gohan112}"
 REPO="${REPO:-neaconvenios}"
@@ -53,13 +56,14 @@ echo "   hecho"
 
 echo ">> 2/3 Creando el disparador…"
 if gcloud builds triggers describe "$NOMBRE" --project "$PROYECTO" \
-     --region "$REGION" >/dev/null 2>&1; then
+     --region "$REGION_DISPARADOR" >/dev/null 2>&1; then
   echo "   ya existía: $NOMBRE"
 elif gcloud builds triggers create github \
-       --project "$PROYECTO" --region "$REGION" --name "$NOMBRE" \
+       --project "$PROYECTO" --region "$REGION_DISPARADOR" --name "$NOMBRE" \
        --repo-owner "$DUENO" --repo-name "$REPO" \
        --branch-pattern "^$(printf '%s' "$RAMA" | sed 's/[.[\*^$]/\\&/g')$" \
        --build-config evento/cloudbuild.yaml \
+       --substitutions "_REGION=$REGION,_SERVICIO=$SERVICIO" \
        --description "NeaEvento: pruebas + despliegue automático" 2>/tmp/nea_error; then
   echo "   creado: $NOMBRE"
 else
@@ -77,7 +81,7 @@ else
 fi
 
 echo ">> 3/3 Lanzando un despliegue ahora, para comprobar que funciona…"
-gcloud builds triggers run "$NOMBRE" --project "$PROYECTO" --region "$REGION" \
+gcloud builds triggers run "$NOMBRE" --project "$PROYECTO" --region "$REGION_DISPARADOR" \
   --branch "$RAMA" >/dev/null
 
 echo ""
@@ -93,5 +97,5 @@ echo "  Ver cómo va:"
 echo "     https://console.cloud.google.com/cloud-build/builds?project=$PROYECTO"
 echo ""
 echo "  Para desactivarlo:"
-echo "     gcloud builds triggers delete $NOMBRE --region $REGION"
+echo "     gcloud builds triggers delete $NOMBRE --region $REGION_DISPARADOR"
 echo "============================================================"
