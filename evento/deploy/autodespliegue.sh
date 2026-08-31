@@ -19,8 +19,22 @@ RAMA="${RAMA:-claude/event-app-day-12-e4lcrp}"
 NOMBRE="${NOMBRE:-neaevento-autodespliegue}"
 
 if [ -z "$PROYECTO" ] || [ "$PROYECTO" = "(unset)" ]; then
-  echo "No sé a qué proyecto. Prueba: gcloud config set project TU-PROYECTO"
-  exit 1
+  echo "Esta sesión de Cloud Shell no tiene proyecto puesto."
+  SUELTOS="$(gcloud projects list --format 'value(projectId)' 2>/dev/null || true)"
+  if [ "$(printf '%s\n' "$SUELTOS" | grep -c .)" = "1" ]; then
+    PROYECTO="$SUELTOS"
+    echo "   Solo tienes uno, así que uso ese: $PROYECTO"
+    gcloud config set project "$PROYECTO" >/dev/null 2>&1 || true
+  else
+    echo ""
+    echo "   Tus proyectos:"
+    printf '%s\n' "$SUELTOS" | sed 's/^/      /'
+    echo ""
+    echo "   Elige uno y repite:"
+    echo "      gcloud config set project EL-QUE-SEA"
+    echo "      bash $0"
+    exit 1
+  fi
 fi
 echo ">> Proyecto: $PROYECTO · repositorio: $DUENO/$REPO · rama: $RAMA"
 

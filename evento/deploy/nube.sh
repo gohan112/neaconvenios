@@ -32,10 +32,22 @@ ALMACEN="${ALMACEN:-neaevento}"          # repositorio de imágenes
 IMAGEN="$REGION-docker.pkg.dev/$PROYECTO/$ALMACEN/$SERVICIO"
 
 if [ -z "$PROYECTO" ] || [ "$PROYECTO" = "(unset)" ]; then
-  echo "No sé a qué proyecto subirlo. Prueba:"
-  echo "   gcloud config set project TU-PROYECTO"
-  echo "   bash deploy/nube.sh"
-  exit 1
+  echo "Esta sesión de Cloud Shell no tiene proyecto puesto."
+  SUELTOS="$(gcloud projects list --format 'value(projectId)' 2>/dev/null || true)"
+  if [ "$(printf '%s\n' "$SUELTOS" | grep -c .)" = "1" ]; then
+    PROYECTO="$SUELTOS"
+    echo "   Solo tienes uno, así que uso ese: $PROYECTO"
+    gcloud config set project "$PROYECTO" >/dev/null 2>&1 || true
+  else
+    echo ""
+    echo "   Tus proyectos:"
+    printf '%s\n' "$SUELTOS" | sed 's/^/      /'
+    echo ""
+    echo "   Elige uno y repite:"
+    echo "      gcloud config set project EL-QUE-SEA"
+    echo "      bash $0"
+    exit 1
+  fi
 fi
 echo ">> Proyecto: $PROYECTO · región: $REGION · servicio: $SERVICIO"
 echo ">> Como: $(gcloud config get-value account 2>/dev/null || echo '?')"
