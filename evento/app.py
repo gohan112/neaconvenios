@@ -32,14 +32,19 @@ import db
 import paginas
 
 CARPETA = os.path.dirname(os.path.abspath(__file__))
-PUERTO = int(os.environ.get("PUERTO", "8502"))
+# PORT lo pone Cloud Run (y casi cualquier nube); PUERTO es el de siempre
+PUERTO = int(os.environ.get("PORT") or os.environ.get("PUERTO") or "8502")
 
 app = Flask(__name__, static_folder=os.path.join(CARPETA, "assets"),
             static_url_path="/assets")
 
 db.iniciar()
 app.secret_key = db.secreto_app()
-app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE="Lax")
+# El nombre «__session» no es capricho: si algún día la app va detrás de
+# Firebase Hosting, esa es la única cookie que deja pasar; con cualquier otro
+# nombre el panel no podría iniciar sesión. Fuera de ahí da igual cómo se llame.
+app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE="Lax",
+                  SESSION_COOKIE_NAME="__session")
 
 PASSWORD_ADMIN = (os.environ.get("EVENTO_ADMIN_PASSWORD") or "").strip()
 

@@ -395,7 +395,35 @@ r = c.post("/admin/restaurar", data={"fichero": (io.BytesIO(b"no soy una copia")
 ok("no es una copia" in r.text, "un fichero que no es una copia se rechaza")
 
 
-# -------------------------------------------------------------- 10. Resultado
+# --------------------------------------------------- 10. Contraseña del panel
+titulo("Contraseña del panel")
+modulo_app.PASSWORD_ADMIN = "clave-de-prueba"       # como si estuviera publicada
+try:
+    con_clave = app.test_client()
+    r = con_clave.get("/admin", follow_redirects=False)
+    ok(r.status_code in (302, 303) and "/admin/entrar" in r.headers.get("Location", ""),
+       "sin sesión, el panel manda a pedir la contraseña")
+    r = con_clave.post("/admin/entrar", data={"password": "otra"}, follow_redirects=True)
+    ok(con_clave.get("/admin", follow_redirects=False).status_code in (302, 303),
+       "con la contraseña mal, no entra")
+    r = con_clave.post("/admin/entrar", data={"password": "clave-de-prueba"},
+                       follow_redirects=False)
+    galletas = [g.split("=", 1)[0] for g in r.headers.getlist("Set-Cookie")]
+    # __session es la única cookie que Firebase Hosting deja llegar a Cloud Run
+    ok(galletas == ["__session"], f"la sesión viaja en __session (había {galletas})")
+    ok(con_clave.get("/admin").status_code == 200, "con la buena, entra")
+    con_clave.get("/admin/salir")
+    ok(con_clave.get("/admin", follow_redirects=False).status_code in (302, 303),
+       "y al salir vuelve a pedirla")
+    # Los enlaces personales no llevan contraseña: tienen que seguir abriéndose
+    alguien = db.listar_participantes()[0]
+    ok(con_clave.get(f"/p/{alguien['token']}").status_code == 200,
+       "el enlace de un participante sigue abriéndose sin contraseña")
+finally:
+    modulo_app.PASSWORD_ADMIN = ""
+
+
+# -------------------------------------------------------------- 11. Resultado
 print()
 if fallos:
     print(f"❌ {len(fallos)} fallo(s):")

@@ -1,0 +1,25 @@
+{
+  "_comentario": [
+    "Opcional: pone Firebase Hosting delante de Cloud Run para que la app tenga",
+    "un dominio corto (https://TU-PROYECTO.web.app) en vez del …run.app largo.",
+    "  firebase deploy --only hosting --project TU-PROYECTO",
+    "Antes hay que haber subido la app:  bash deploy/nube.sh",
+    "Si cambiaste SERVICIO o REGION al desplegar, cámbialos también aquí."
+  ],
+  "hosting": {
+    "public": "hosting",
+    "ignore": ["firebase.json", "LEEME.txt", "**/.*", "**/node_modules/**"],
+    "rewrites": [
+      { "source": "**", "run": { "serviceId": "neaevento", "region": "europe-west1" } }
+    ],
+    "headers": [
+      {
+        "source": "**",
+        "headers": [
+          { "key": "Cache-Control", "value": "no-store, max-age=0" },
+          { "key": "Service-Worker-Allowed", "value": "/" }
+        ]
+      }
+    ]
+  }
+}

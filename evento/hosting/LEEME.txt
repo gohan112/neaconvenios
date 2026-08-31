@@ -1,0 +1,5 @@
+Carpeta a propósito vacía.
+
+Firebase Hosting necesita una carpeta de ficheros estáticos, pero aquí no
+servimos ninguno: todo (incluidos los iconos) lo sirve la app en Cloud Run, y
+la regla "rewrites" de firebase.json manda cada dirección allí.

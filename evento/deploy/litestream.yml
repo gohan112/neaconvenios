@@ -1,0 +1,11 @@
+# Copia continua de la base de datos a un bucket (Google Cloud Storage).
+# REPLICA_URL la pone el despliegue, p. ej.:  gcs://mi-bucket/neaevento
+dbs:
+  - path: /data/evento.db
+    replicas:
+      - url: ${REPLICA_URL}
+        # Con 18 personas apuntando tiempos, cada segundo va sobrado
+        sync-interval: 1s
+        # Una instantánea cada hora y se guardan 3 días: sobra para un evento
+        snapshot-interval: 1h
+        retention: 72h

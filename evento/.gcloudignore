@@ -1,0 +1,14 @@
+# Lo que NO se sube a Cloud Build. Igual que .dockerignore, pero gcloud usa
+# este: sin él subiría al bucket de construcción la base de datos local, que
+# lleva nombres y teléfonos de la gente.
+.git/
+*.db
+*.db-*
+*.csv
+clave_admin.txt
+.version_fallida
+__pycache__/
+*.pyc
+.DS_Store
+hosting/
+firebase.json

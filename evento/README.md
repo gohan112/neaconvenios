@@ -181,6 +181,44 @@ docker run -d -p 8502:8502 -v neaevento_datos:/data \
   -e EVENTO_ADMIN_PASSWORD=una_buena_contraseña neaevento
 ```
 
+Opción C — Google Cloud Run (sirve la cuenta **Blaze de Firebase**: un
+proyecto de Firebase *es* un proyecto de Google Cloud). Una sola vez:
+
+```bash
+gcloud auth login && gcloud config set project TU-PROYECTO
+cd evento && bash deploy/nube.sh
+```
+
+Deja la app en `https://neaevento-xxxx.a.run.app`, con certificado ya puesto:
+no hay que abrir puertos, ni instalar Caddy, ni mantener ninguna máquina. Al
+terminar imprime la dirección y la contraseña del panel.
+
+Lo delicado aquí es la base de datos: en Cloud Run el disco del contenedor se
+borra en cada reinicio. Por eso la imagen (`Dockerfile.nube`) lleva dentro
+**Litestream**, que copia el `evento.db` a un bucket cada segundo y lo
+restaura al arrancar. Si Google reinicia el contenedor a media mañana, la app
+vuelve con todos los tiempos apuntados. Va con **una sola instancia**
+(`--min-instances 1 --max-instances 1 --no-cpu-throttling`) a propósito:
+SQLite lo escribe uno cada vez, y así no se duerme entre tiempo y tiempo.
+
+Con `min-instances 1` la instancia está encendida siempre. Para no gastar el
+resto del año, cuando pase el evento:
+
+```bash
+gcloud run services update neaevento --region europe-west1 --min-instances 0
+```
+
+Y si quieres un dominio corto para el WhatsApp (`https://TU-PROYECTO.web.app`
+en vez del `…run.app`), hay un `firebase.json` preparado que pone Firebase
+Hosting por delante:
+
+```bash
+firebase deploy --only hosting --project TU-PROYECTO
+```
+
+(La app guarda la sesión del panel en la cookie `__session` justamente por
+esto: es la única que Firebase Hosting deja pasar hasta Cloud Run.)
+
 Después, en el panel **⚙️ Evento**, pon la **URL pública** (p. ej.
 `http://IP:8502`) para que los enlaces personales se generen con ella.
 
@@ -199,7 +237,8 @@ Después, en el panel **⚙️ Evento**, pon la **URL pública** (p. ej.
 |---|---|---|
 | `EVENTO_ADMIN_PASSWORD` | Contraseña del panel `/admin` | *(sin contraseña, solo local)* |
 | `EVENTO_DB_PATH` | Ruta del fichero de datos | `evento.db` junto a la app |
-| `PUERTO` | Puerto del servidor | `8502` |
+| `PUERTO` / `PORT` | Puerto del servidor (`PORT` lo pone Cloud Run) | `8502` |
+| `REPLICA_URL` | Bucket donde replicar la base en la nube, p. ej. `gcs://bucket/neaevento` | *(sin copia)* |
 
 ## Ficheros
 
@@ -212,6 +251,9 @@ Después, en el panel **⚙️ Evento**, pon la **URL pública** (p. ej.
 | `deploy/lightsail.sh` | Instalación en Lightsail pegando un solo comando |
 | `deploy/setup.sh` | Instalación como servicio en un servidor Ubuntu |
 | `Dockerfile` | Imagen Docker (datos persistentes en el volumen `/data`) |
+| `deploy/nube.sh` | Sube la app a Google Cloud Run (cuenta Blaze de Firebase) |
+| `Dockerfile.nube` | Imagen para Cloud Run: la app + Litestream (copia al bucket) |
+| `firebase.json` | Opcional: Firebase Hosting delante, para un dominio corto |
 
 ## Notas de diseño
 
