@@ -395,6 +395,23 @@ r = c.post("/admin/restaurar", data={"fichero": (io.BytesIO(b"no soy una copia")
 ok("no es una copia" in r.text, "un fichero que no es una copia se rechaza")
 
 
+# ------------------------------------------------ 9b. El encargo del capitán
+titulo("El capitán sabe de qué se encarga")
+capitan = db.participante(db.listar_equipos()[0]["capitan_id"])
+suya = c.get(f"/p/{capitan['token']}").text
+for trozo, que in (("cumplan los horarios", "los horarios"),
+                   ("a tiempo", "que los suyos estén en su sitio"),
+                   ("tiempos estén bien puestos", "repasar las vueltas de los suyos"),
+                   ("hora de salida", "la hora de la escape room")):
+    ok(trozo in suya, f"al capitán se le pide {que}")
+otro = next(p for p in db.miembros(capitan["equipo_id"])
+            if p["id"] != capitan["id"])
+suya_otro = c.get(f"/p/{db.participante(otro['id'])['token']}").text
+ok("cumplan los horarios" not in suya_otro,
+   "a quien no es capitán no se le encarga nada de eso")
+ok("la apunta" in suya_otro or "vuestro capitán" in suya_otro,
+   "y se le dice que de la hora de la escape se ocupa su capitán")
+
 # ------------------------------------------- 10. Los enlaces llevan a algún sitio
 titulo("Los enlaces apuntan donde deben")
 db.guardar_config({"url_base": ""})

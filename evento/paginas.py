@@ -1334,9 +1334,20 @@ def render_participante(cfg: dict, p: dict, equipo: dict | None,
         tarjeta_capitan = f"""
 <div class="tarjeta destacada">
   <h2>👑 Eres el capitán de tu equipo</h2>
-  <p class="silencio" style="margin-top:0">Cuando salgáis de vuestra sala de la
-  escape room, apunta aquí la hora de salida: con ella se calculan los puntos
-  del equipo.</p>
+  <p style="margin-top:0">Tu equipo va a depender de ti para tres cosas:</p>
+  <div class="lista-datos" style="margin-bottom:var(--e4)">
+    <div>⏰ <strong>Que se cumplan los horarios.</strong> Mira el programa del
+    día y ve avisando a los tuyos de lo que toca y a qué hora.</div>
+    <div>📍 <strong>Que estén en su sitio a tiempo.</strong> Antes de cada
+    actividad, cuenta que no falte nadie.</div>
+    <div>🏎️ <strong>Que los tiempos estén bien puestos.</strong> Cada uno
+    apunta su vuelta, pero tú repasa que nadie se la deje sin meter ni se
+    equivoque al copiarla: un tiempo que falta son puntos que pierde tu
+    equipo.</div>
+  </div>
+  <p class="silencio" style="margin-top:0">Y una que solo puedes hacer tú:
+  cuando salgáis de la escape room, apunta aquí la hora de salida. Con ella se
+  calculan los puntos del equipo.</p>
   <form class="linea" method="post" action="/p/{e(p['token'])}/tiempo_escape">
     <div style="flex:1;min-width:120px">
       <label for="hora-salida">Hora de salida</label>
@@ -1416,9 +1427,10 @@ def render_participante(cfg: dict, p: dict, equipo: dict | None,
                         'primeras tandas se van a la final: cuando estén todos los '
                         'tiempos, la app avisa a quien pasa.</div>')
         if es_capitan:
-            deberes += ('<div>👑 <strong>Eres el capitán:</strong> al salir de vuestra '
-                        'sala, apunta aquí la hora de salida. Esa solo la puedes meter '
-                        'tú.</div>')
+            deberes += ('<div>👑 <strong>Eres el capitán:</strong> velar por que se '
+                        'cumplan los horarios, que los tuyos estén en cada sitio a '
+                        'tiempo y que todos apunten bien su vuelta. Y al salir de '
+                        'vuestra sala, la hora de salida: esa solo la metes tú.</div>')
         else:
             deberes += ('<div>🗝️ La hora de salida de la escape room la apunta '
                         'vuestro capitán (👑): tú, tranquilo.</div>')
