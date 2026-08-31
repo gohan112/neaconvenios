@@ -62,21 +62,31 @@ elif gcloud builds triggers create github \
        --project "$PROYECTO" --region "$REGION_DISPARADOR" --name "$NOMBRE" \
        --repo-owner "$DUENO" --repo-name "$REPO" \
        --branch-pattern "^$(printf '%s' "$RAMA" | sed 's/[.[\*^$]/\\&/g')$" \
-       --build-config evento/cloudbuild.yaml \
-       --substitutions "_REGION=$REGION,_SERVICIO=$SERVICIO" \
-       --description "NeaEvento: pruebas + despliegue automático" 2>/tmp/nea_error; then
+       --build-config evento/cloudbuild.yaml 2>/tmp/nea_error; then
   echo "   creado: $NOMBRE"
 else
-  cat /tmp/nea_error >&2
   echo ""
-  echo "  Casi seguro que falta conectar el repositorio con Cloud Build."
-  echo "  Es una pantalla y dos clics, una sola vez:"
+  echo "  No se ha podido crear el disparador. Esto es lo que contesta Google:"
+  sed 's/^/     /' /tmp/nea_error >&2
   echo ""
-  echo "   1. Abre:"
-  echo "      https://console.cloud.google.com/cloud-build/triggers?project=$PROYECTO"
-  echo "   2. «Conectar repositorio» → GitHub → autoriza → elige $DUENO/$REPO"
-  echo "   3. Vuelve aquí y repite:  bash deploy/autodespliegue.sh"
+  echo "  Dos motivos posibles, y no puedo distinguirlos desde aquí:"
   echo ""
+  echo "  a) El repositorio aún no está conectado con Cloud Build:"
+  echo "        https://console.cloud.google.com/cloud-build/triggers?project=$PROYECTO"
+  echo "     «Conectar repositorio» → GitHub → autorizar → $DUENO/$REPO"
+  echo ""
+  echo "  b) La conexión es de las nuevas (2ª generación) y hay que crear el"
+  echo "     disparador desde la propia consola. En esa misma pantalla,"
+  echo "     «Crear disparador», con estos valores:"
+  echo "        Nombre:        $NOMBRE"
+  echo "        Evento:        Enviar a una rama"
+  echo "        Repositorio:   $DUENO/$REPO"
+  echo "        Rama:          ^$RAMA\$"
+  echo "        Configuración: Archivo de configuración de Cloud Build"
+  echo "        Ubicación:     evento/cloudbuild.yaml"
+  echo ""
+  echo "  Los permisos del paso 1 ya están puestos, así que con crear el"
+  echo "  disparador (de la forma que sea) queda todo listo."
   exit 1
 fi
 
