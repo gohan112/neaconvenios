@@ -208,6 +208,26 @@ resto del año, cuando pase el evento:
 gcloud run services update neaevento --region europe-west1 --min-instances 0
 ```
 
+#### También se actualiza sola
+
+Como el servidor de Ubuntu, pero por el camino de la nube. Una sola vez:
+
+```bash
+cd evento && bash deploy/autodespliegue.sh
+```
+
+Deja un disparador de Cloud Build enganchado al repositorio: cada cambio que
+llega a la rama **pasa primero las pruebas** (`pruebas.py`) y solo entonces se
+construye la imagen y se despliega. Si las pruebas fallan, la construcción se
+para y Cloud Run sigue sirviendo la versión buena — no hace falta ni deshacer
+nada, porque la versión anterior nunca se llegó a tocar. La receta está en
+`evento/cloudbuild.yaml`.
+
+La primera vez hay que conectar el repositorio con Cloud Build desde la
+consola (una pantalla, dos clics); el script te dice dónde si falta. Y como el
+despliegue solo cambia la imagen, la contraseña del panel, el bucket de la
+copia y el número de instancias se quedan como estaban.
+
 Y si quieres un dominio corto para el WhatsApp (`https://TU-PROYECTO.web.app`
 en vez del `…run.app`), hay un `firebase.json` preparado que pone Firebase
 Hosting por delante:
@@ -252,6 +272,8 @@ Después, en el panel **⚙️ Evento**, pon la **URL pública** (p. ej.
 | `deploy/setup.sh` | Instalación como servicio en un servidor Ubuntu |
 | `Dockerfile` | Imagen Docker (datos persistentes en el volumen `/data`) |
 | `deploy/nube.sh` | Sube la app a Google Cloud Run (cuenta Blaze de Firebase) |
+| `deploy/autodespliegue.sh` | Deja Cloud Run actualizándose solo con cada cambio |
+| `cloudbuild.yaml` | Receta de ese automatismo: pruebas → imagen → despliegue |
 | `Dockerfile.nube` | Imagen para Cloud Run: la app + Litestream (copia al bucket) |
 | `firebase.json` | Opcional: Firebase Hosting delante, para un dominio corto |
 

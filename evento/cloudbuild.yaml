@@ -1,0 +1,55 @@
+# Primero PRUEBA, después despliega.
+#
+# Lo lanza el disparador que crea deploy/autodespliegue.sh cada vez que hay un
+# cambio nuevo en GitHub. Si las pruebas fallan, la construcción se para y
+# Cloud Run se queda sirviendo la versión anterior: nunca sube algo roto.
+steps:
+  - id: pruebas
+    name: python:3.12-slim
+    dir: evento
+    entrypoint: bash
+    args:
+      - -c
+      - pip install --quiet -r requirements.txt && python pruebas.py
+
+  - id: imagen
+    name: gcr.io/cloud-builders/docker
+    dir: evento
+    args:
+      - build
+      - -f
+      - Dockerfile.nube
+      - -t
+      - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_ALMACEN}/${_SERVICIO}
+      - .
+
+  - id: subir
+    name: gcr.io/cloud-builders/docker
+    args:
+      - push
+      - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_ALMACEN}/${_SERVICIO}
+
+  # Solo se cambia la imagen: las variables de entorno (la contraseña del
+  # panel, el bucket de la copia) y el número de instancias se quedan igual.
+  - id: desplegar
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - ${_SERVICIO}
+      - --image=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_ALMACEN}/${_SERVICIO}
+      - --region=${_REGION}
+      - --quiet
+
+substitutions:
+  _REGION: europe-west1
+  _SERVICIO: neaevento
+  _ALMACEN: neaevento
+
+images:
+  - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_ALMACEN}/${_SERVICIO}
+
+options:
+  logging: CLOUD_LOGGING_ONLY
+timeout: 1200s
