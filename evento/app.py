@@ -933,8 +933,19 @@ def admin_enlaces():
     texto_todos = "\n".join(f"{f['nombre']}: {f['enlace']}" for f in filas)
     return paginas.render_enlaces(
         filas_datos=filas, url_base=url_base, url_definida=definida,
+        url_navegador=request.url_root.rstrip("/"),
         texto_todos=texto_todos, avisos=_avisos(), sin_password=_sin_password(),
     )
+
+
+@app.post("/admin/evento/url")
+@requiere_admin
+def admin_evento_url():
+    """Corrige de un botón la URL pública (el aviso de la pestaña Enlaces)."""
+    nueva = (request.form.get("url_base") or "").strip().rstrip("/")
+    db.guardar_config({"url_base": nueva})
+    flash(f"Los enlaces se generan ya con {nueva}", "ok")
+    return redirect("/admin/enlaces")
 
 
 @app.get("/admin/enlaces.csv")

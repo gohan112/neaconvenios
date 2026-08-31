@@ -395,7 +395,35 @@ r = c.post("/admin/restaurar", data={"fichero": (io.BytesIO(b"no soy una copia")
 ok("no es una copia" in r.text, "un fichero que no es una copia se rechaza")
 
 
-# --------------------------------------------------- 10. Contraseña del panel
+# ------------------------------------------- 10. Los enlaces llevan a algún sitio
+titulo("Los enlaces apuntan donde deben")
+db.guardar_config({"url_base": ""})
+r = c.get("/admin/enlaces")
+ok("dirección actual del navegador" in r.text,
+   "sin URL fijada, avisa de que usa la del navegador")
+
+db.guardar_config({"url_base": "http://13.38.46.216:8502"})
+r = c.get("/admin/enlaces")
+ok("NO llevan aquí" in r.text,
+   "si la URL fijada es otro servidor, avisa bien claro")
+ok("http://13.38.46.216:8502/p/" in r.text, "y los enlaces salen con la vieja")
+
+# El botón manda la dirección desde la que se está mirando el panel
+r = c.post("/admin/evento/url", data={"url_base": "http://localhost/"},
+           follow_redirects=True)
+ok(db.leer_config()["url_base"] == "http://localhost",
+   "el botón de arreglarlo la corrige (y le quita la barra final)")
+r = c.get("/admin/enlaces")
+ok("NO llevan aquí" not in r.text, "y el aviso desaparece")
+ok("http://localhost/p/" in r.text, "los enlaces ya salen con la buena")
+# Y si luego mueves el servidor de sitio, vuelve a saltar solo
+db.guardar_config({"url_base": "https://otra-cosa.example"})
+ok("NO llevan aquí" in c.get("/admin/enlaces").text,
+   "si el servidor cambia de dirección, el aviso vuelve")
+db.guardar_config({"url_base": ""})
+
+
+# --------------------------------------------------- 11. Contraseña del panel
 titulo("Contraseña del panel")
 modulo_app.PASSWORD_ADMIN = "clave-de-prueba"       # como si estuviera publicada
 try:
@@ -423,7 +451,7 @@ finally:
     modulo_app.PASSWORD_ADMIN = ""
 
 
-# -------------------------------------------------------------- 11. Resultado
+# -------------------------------------------------------------- 12. Resultado
 print()
 if fallos:
     print(f"❌ {len(fallos)} fallo(s):")

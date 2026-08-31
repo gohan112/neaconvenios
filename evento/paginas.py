@@ -2627,9 +2627,24 @@ def render_lugar_editar(lugar_: dict, avisos=None, sin_password=False) -> str:
 
 
 def render_enlaces(filas_datos: list[dict], url_base: str, url_definida: bool,
-                   texto_todos: str, avisos=None, sin_password=False) -> str:
+                   texto_todos: str, avisos=None, sin_password=False,
+                   url_navegador: str = "") -> str:
     aviso_url = ""
-    if not url_definida:
+    # El fallo que más caro sale: repartir 18 enlaces que apuntan a un servidor
+    # que ya no existe. Si la URL fijada no es donde estás ahora mismo, se dice
+    # bien claro y se arregla de un botón.
+    if url_definida and url_navegador and url_base.rstrip("/") != url_navegador:
+        aviso_url = (f'<div class="aviso error"><strong>⚠️ Cuidado: estos enlaces '
+                     f'NO llevan aquí.</strong><br>Se están generando con '
+                     f'<code>{e(url_base)}</code>, pero tú estás en '
+                     f'<code>{e(url_navegador)}</code>. Si los repartes así, a la '
+                     f'gente no le abrirá nada.'
+                     f'<form method="post" action="/admin/evento/url" '
+                     f'style="margin-top:var(--e3)">'
+                     f'<input type="hidden" name="url_base" value="{e(url_navegador)}">'
+                     f'<button class="boton" type="submit">Generarlos con '
+                     f'{e(url_navegador)}</button></form></div>')
+    elif not url_definida:
         aviso_url = (f'<div class="aviso">Los enlaces se están generando con la dirección '
                      f'actual del navegador (<code>{e(url_base)}</code>). Si vas a '
                      f'repartirlos, fija la <strong>URL pública</strong> definitiva en '
