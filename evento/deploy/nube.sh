@@ -33,8 +33,22 @@ fi
 echo ">> Proyecto: $PROYECTO · región: $REGION · servicio: $SERVICIO"
 
 echo ">> 1/5 Activando lo que hace falta (la primera vez tarda un poco)…"
-gcloud services enable run.googleapis.com cloudbuild.googleapis.com \
-  storage.googleapis.com artifactregistry.googleapis.com --project "$PROYECTO"
+if ! gcloud services enable run.googleapis.com cloudbuild.googleapis.com \
+     storage.googleapis.com artifactregistry.googleapis.com --project "$PROYECTO"; then
+  echo ""
+  echo "  No se han podido activar los servicios. Casi siempre es una de dos:"
+  echo ""
+  echo "  · El proyecto sigue en el plan gratis (Spark). Cloud Run necesita"
+  echo "    Blaze: en console.firebase.google.com, con el proyecto abierto,"
+  echo "    ⚙️ → Uso y facturación → Modificar plan → Blaze. No hay que volver"
+  echo "    a meter la tarjeta: se elige la cuenta de facturación que ya tienes."
+  echo ""
+  echo "  · O el proyecto no es este. Comprueba el ID (no el nombre bonito):"
+  echo "        gcloud projects list"
+  echo "        gcloud config set project EL-ID-DE-ARRIBA"
+  echo ""
+  exit 1
+fi
 
 echo ">> 2/5 Bucket para la copia de la base…"
 if ! gcloud storage buckets describe "gs://$BUCKET" --project "$PROYECTO" >/dev/null 2>&1; then
