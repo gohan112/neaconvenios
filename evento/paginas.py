@@ -2645,7 +2645,13 @@ def render_enlaces(filas_datos: list[dict], url_base: str, url_definida: bool,
     # El fallo que más caro sale: repartir 18 enlaces que apuntan a un servidor
     # que ya no existe. Si la URL fijada no es donde estás ahora mismo, se dice
     # bien claro y se arregla de un botón.
-    if url_definida and url_navegador and url_base.rstrip("/") != url_navegador:
+    # Se compara solo el servidor, no el http/https: lo segundo lo arregla el
+    # proxy solo y avisar de ello sería un susto para nada. Lo que mata los
+    # enlaces es que apunten a OTRA máquina.
+    def _maquina(u: str) -> str:
+        return (u or "").split("://")[-1].strip("/").lower()
+
+    if url_definida and url_navegador and _maquina(url_base) != _maquina(url_navegador):
         aviso_url = (f'<div class="aviso error"><strong>⚠️ Cuidado: estos enlaces '
                      f'NO llevan aquí.</strong><br>Se están generando con '
                      f'<code>{e(url_base)}</code>, pero tú estás en '

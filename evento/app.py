@@ -38,6 +38,12 @@ PUERTO = int(os.environ.get("PORT") or os.environ.get("PUERTO") or "8502")
 app = Flask(__name__, static_folder=os.path.join(CARPETA, "assets"),
             static_url_path="/assets")
 
+# Detrás de un proxy (Cloud Run, Caddy…) el certificado lo termina él y al
+# contenedor le llega la petición en http. Sin esto la app cree que vive en
+# http:// y generaría los enlaces mal.
+from werkzeug.middleware.proxy_fix import ProxyFix  # noqa: E402
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
+
 db.iniciar()
 app.secret_key = db.secreto_app()
 # El nombre «__session» no es capricho: si algún día la app va detrás de

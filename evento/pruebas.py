@@ -442,6 +442,19 @@ db.guardar_config({"url_base": "http://13.38.46.216:8502"})
 r = c.get("/admin/enlaces")
 ok("NO llevan aquí" in r.text,
    "si la URL fijada es otro servidor, avisa bien claro")
+
+# Detrás de un proxy la app recibe http aunque el navegador vaya por https:
+# el mismo servidor con distinto esquema NO puede saltar el aviso.
+db.guardar_config({"url_base": "https://localhost"})
+ok("NO llevan aquí" not in c.get("/admin/enlaces").text,
+   "el mismo servidor por https no dispara ninguna alarma")
+# Y el proxy tiene que hacer que la app se sepa en https
+r = c.get("/admin/enlaces", headers={"X-Forwarded-Proto": "https",
+                                     "X-Forwarded-Host": "neaevento.example"})
+ok("NO llevan aquí" in r.text and "neaevento.example" in r.text,
+   "y con la cabecera del proxy sabe en qué servidor está de verdad")
+db.guardar_config({"url_base": "http://13.38.46.216:8502"})
+r = c.get("/admin/enlaces")
 ok("http://13.38.46.216:8502/p/" in r.text, "y los enlaces salen con la vieja")
 
 # El botón manda la dirección desde la que se está mirando el panel
