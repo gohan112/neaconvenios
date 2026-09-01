@@ -413,6 +413,17 @@ ok("Te toca a ti" not in otra["descripcion"], "las de los demás, no")
 escape = next(i for i in programa if i["hora"] == "08:40")
 ok("Luxor" in escape["descripcion"], "en la escape sale su sala")
 
+# El aviso de llegada (aparcar, margen…) va con la hora, en los dos sitios
+db.guardar_config({"escape_nota": "mejor ya aparcados"})
+prog2 = db.agenda_para(piloto["equipo_id"], sala="Luxor", tanda="2")
+ok("mejor ya aparcados" in next(i for i in prog2 if i["hora"] == "08:40")["descripcion"],
+   "el aviso de llegada sale en el programa")
+ok("mejor ya aparcados" in c.get(f"/p/{piloto['token']}").text,
+   "y también en su tarjeta de la escape room")
+db.guardar_config({"escape_nota": ""})
+ok("mejor ya aparcados" not in c.get(f"/p/{piloto['token']}").text,
+   "y si se deja vacío no ensucia nada")
+
 # Lo puesto a mano manda: si ya hay algo a esa hora, no se duplica
 db.crear_actividad("11:30", "", "Karts (lo pongo yo)", "", None, None)
 horas2 = [i["hora"] for i in db.agenda_para(piloto["equipo_id"], tanda="2")]

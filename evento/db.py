@@ -59,6 +59,8 @@ CONFIG_DEFECTO = {
                     "Infamia: un submarino japonés es el primero en llegar a "
                     "Pearl Harbor",
     "escape_lugar_id": "",
+    # Lo que hay que saber para llegar bien (aparcar, margen…). Sale junto a la hora.
+    "escape_nota": "",
     # Puntos de la escape room por orden de salida (1º, 2º, 3º…)
     "puntos_escape": "20, 10, 5",
     "url_base": "",
@@ -1184,9 +1186,11 @@ def citas_de_la_configuracion(sala: str = "", tanda: str = "") -> list[dict]:
     citas = []
     hora_escape = (cfg.get("escape_hora") or "").strip()
     if hora_escape:
-        citas.append(_cita(
-            hora_escape, cfg.get("escape_titulo") or "Escape room",
+        detalle = " · ".join(x for x in (
             f"Vuestra sala: {sala}" if sala else "",
+            (cfg.get("escape_nota") or "").strip()) if x)
+        citas.append(_cita(
+            hora_escape, cfg.get("escape_titulo") or "Escape room", detalle,
             cfg.get("escape_lugar_id"), lugares))
     for numero in ("1", "2", "3"):
         hora = (cfg.get(f"karts_hora{numero}") or "").strip()

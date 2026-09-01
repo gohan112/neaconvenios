@@ -1009,6 +1009,7 @@ def admin_evento_guardar():
         "url_base": (request.form.get("url_base", "") or "").rstrip("/"),
         "msg_whatsapp": request.form.get("msg_whatsapp", ""),
         "msg_asunto": request.form.get("msg_asunto", ""),
+        "escape_nota": request.form.get("escape_nota", ""),
     })
     flash("Datos del evento guardados.", "ok")
     return redirect("/admin/evento")

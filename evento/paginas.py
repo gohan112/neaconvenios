@@ -1479,7 +1479,9 @@ def render_participante(cfg: dict, p: dict, equipo: dict | None,
             "🗝️", cfg.get("escape_titulo") or "Escape room", cfg.get("escape_hora") or "",
             f'<strong>Vuestra sala: {e(equipo["sala"])}</strong>{descripcion_sala}'
             f'{enlace_sitio}<div class="silencio">Hay que estar allí a las '
-            f'{e(cfg.get("escape_hora"))}.</div>{recuerdo_capitan}')
+            f'{e(cfg.get("escape_hora"))}'
+            f'{" — " + e(cfg.get("escape_nota")) if (cfg.get("escape_nota") or "").strip() else ""}'
+            f'.</div>{recuerdo_capitan}')
 
     # Su tanda de karts, si está sorteada
     aviso_tanda = ""
@@ -2429,6 +2431,9 @@ def _tarjeta_salas(cfg: dict, equipos: list[dict], lugares: list[dict],
       <div><label>Lugar</label>
         <select name="escape_lugar_id">{opciones_lugar}</select></div>
     </div>
+    <label>Aviso de llegada (sale junto a la hora, en la tarjeta y en el programa)</label>
+    <input name="escape_nota" value="{e(cfg.get('escape_nota'))}" style="width:100%"
+           placeholder="mejor ya aparcados, para empezar sin prisas">
     <label>Salas (una por línea: «Nombre: descripción») — debe haber una por equipo</label>
     <textarea name="escape_salas" rows="4" style="width:100%">{e(cfg.get('escape_salas'))}</textarea>
     <div style="margin-top:8px"><button class="boton mini" type="submit">Guardar</button></div>
