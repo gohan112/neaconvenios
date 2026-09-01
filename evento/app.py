@@ -916,12 +916,21 @@ def _filas_enlaces(url_base: str) -> list[dict]:
             mensaje = _mensaje_whatsapp(cfg, p["nombre"], enlace,
                                         apodo=p.get("apodo") or "")
             wa = f"https://wa.me/{telefono_wa}?text={quote(mensaje)}"
+        # Un «mailto:» con asunto y texto ya escritos: al pulsarlo se abre el
+        # correo del ordenador (Outlook) con todo puesto y solo hay que enviar.
+        correo = ""
+        if (p["email"] or "").strip():
+            cuerpo = _mensaje_whatsapp(cfg, p["nombre"], enlace,
+                                       apodo=p.get("apodo") or "")
+            asunto = (cfg.get("msg_asunto") or "").strip() or "Tu enlace personal"
+            correo = (f"mailto:{quote(p['email'].strip())}"
+                      f"?subject={quote(asunto)}&body={quote(cuerpo)}")
         filas.append({"nombre": p["nombre"], "apodo": p.get("apodo") or "",
                       "rol": p.get("rol") or "", "telefono": p["telefono"],
                       "email": p["email"], "equipo": p.get("equipo_nombre") or "",
                       "tanda": p.get("tanda") or "",
                       "confirmado": p["confirmado"], "visto_en": p.get("visto_en"),
-                      "enlace": enlace, "wa": wa})
+                      "enlace": enlace, "wa": wa, "correo": correo})
     return filas
 
 
@@ -990,6 +999,7 @@ def admin_evento_guardar():
         "contacto": request.form.get("contacto", ""),
         "url_base": (request.form.get("url_base", "") or "").rstrip("/"),
         "msg_whatsapp": request.form.get("msg_whatsapp", ""),
+        "msg_asunto": request.form.get("msg_asunto", ""),
     })
     flash("Datos del evento guardados.", "ok")
     return redirect("/admin/evento")

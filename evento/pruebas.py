@@ -412,6 +412,25 @@ ok("cumplan los horarios" not in suya_otro,
 ok("la apunta" in suya_otro or "vuestro capitán" in suya_otro,
    "y se le dice que de la hora de la escape se ocupa su capitán")
 
+# --------------------------------------------- 9c. Repartir por correo también
+titulo("Cada uno se puede avisar por correo")
+alguien = db.listar_participantes()[0]
+p_alguien = db.participante(alguien["id"])
+db.editar_participante(p_alguien["id"], p_alguien["nombre"], p_alguien["telefono"], "prueba@neamaster.com", p_alguien["equipo_id"], p_alguien["notas"] or "", p_alguien["apodo"] or "", p_alguien["rol"] or "", p_alguien["tanda"] or "")
+db.guardar_config({"url_base": "https://neaevento.example",
+                   "msg_asunto": "Tu enlace de la Olimpiada"})
+pagina = c.get("/admin/enlaces").text
+ok("mailto:prueba%40neamaster.com" in pagina, "sale el botón de correo con su dirección")
+ok("Tu%20enlace%20de%20la%20Olimpiada" in pagina, "con el asunto configurado")
+ok("neaevento.example/p/" in pagina, "y su enlace personal dentro del texto")
+ok(pagina.count("mailto:") == 1, "solo el que tiene correo tiene botón")
+sin_correo = db.listar_participantes()[1]
+p_sin_correo = db.participante(sin_correo["id"])
+db.editar_participante(p_sin_correo["id"], p_sin_correo["nombre"], p_sin_correo["telefono"], "", p_sin_correo["equipo_id"], p_sin_correo["notas"] or "", p_sin_correo["apodo"] or "", p_sin_correo["rol"] or "", p_sin_correo["tanda"] or "")
+trozo = c.get("/admin/enlaces").text.split(db.participante(sin_correo["id"])["nombre"])[-1]
+ok("mailto:" not in trozo[:500], "a quien no tiene correo no le sale el botón")
+db.guardar_config({"url_base": "", "msg_asunto": ""})
+
 # ------------------------------------------- 10. Los enlaces llevan a algún sitio
 titulo("Los enlaces apuntan donde deben")
 db.guardar_config({"url_base": ""})

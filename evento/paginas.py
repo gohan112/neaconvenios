@@ -2663,11 +2663,16 @@ def render_enlaces(filas_datos: list[dict], url_base: str, url_definida: bool,
                      f'<a href="/admin/evento">⚙️ Evento</a> para que no cambien.</div>')
     filas = ""
     for f in filas_datos:
+        envios = []
         if f["wa"]:
-            wa = (f'<a class="boton secundario mini" href="{e(f["wa"])}" target="_blank" '
-                  f'rel="noopener">WhatsApp</a>')
-        else:
-            wa = '<span class="silencio" title="Sin teléfono">—</span>'
+            envios.append(f'<a class="boton secundario mini" href="{e(f["wa"])}" '
+                          f'target="_blank" rel="noopener">WhatsApp</a>')
+        if f.get("correo"):
+            # Abre el correo del ordenador (Outlook) con asunto y texto puestos
+            envios.append(f'<a class="boton secundario mini" href="{e(f["correo"])}" '
+                          f'title="{e(f["email"])}">Correo</a>')
+        wa = (" ".join(envios) if envios else
+              '<span class="silencio" title="Sin teléfono ni correo">—</span>')
         if f["confirmado"] == 1:
             estado = '<span class="insignia ok">✅ viene</span>'
         elif f["confirmado"] == -1:
@@ -2740,8 +2745,13 @@ def render_evento(cfg: dict, avisos=None, sin_password=False) -> str:
     <label>URL pública de la app (para generar los enlaces personales)</label>
     <input name="url_base" value="{e(cfg.get('url_base'))}" style="width:100%"
            placeholder="https://evento.neamaster.com o http://IP:8502">
-    <label>Plantilla del mensaje de WhatsApp — usa {{nombre}}, {{apodo}} y {{enlace}}</label>
+    <label>Plantilla del mensaje — usa {{nombre}}, {{apodo}} y {{enlace}}</label>
     <textarea name="msg_whatsapp" rows="4" style="width:100%">{e(cfg.get('msg_whatsapp'))}</textarea>
+    <div class="silencio" style="margin-top:4px">Se usa igual para WhatsApp y para
+    el correo; solo el asunto es distinto.</div>
+    <label>Asunto del correo</label>
+    <input name="msg_asunto" value="{e(cfg.get('msg_asunto'))}" style="width:100%"
+           placeholder="Olimpiada Nea Master: tu enlace personal">
     <div style="margin-top:12px">
       <button class="boton" type="submit">Guardar</button>
     </div>

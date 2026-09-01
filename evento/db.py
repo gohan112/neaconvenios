@@ -63,6 +63,8 @@ CONFIG_DEFECTO = {
     "puntos_escape": "20, 10, 5",
     "url_base": "",
     "contacto": "",
+    # Asunto del correo (el cuerpo es el mismo texto que el de WhatsApp)
+    "msg_asunto": "Olimpiada Nea Master: tu enlace personal",
     "msg_whatsapp": "¡Hola, {nombre}! Este es tu enlace personal para el evento: {enlace}\n"
                     "Dentro verás tu equipo, el programa del día y los lugares. "
                     "¡Entra y confirma tu asistencia!\n"
