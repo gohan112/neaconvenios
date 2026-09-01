@@ -2553,6 +2553,10 @@ def render_agenda(items: list[dict], lugares: list[dict], equipos: list[dict],
 <div class="tarjeta">
   <h2>Programa del día ({len(items)})</h2>
   {tabla}
+  <p class="silencio" style="margin-bottom:0">Además de esto, cada participante ve
+  en su programa <strong>la escape room y las tandas de karts</strong>, con la hora
+  y el sitio que tengan puestos aquí abajo. No hace falta añadirlas a mano — y si
+  las añades, mandan las tuyas.</p>
 </div>
 {_tarjeta_salas(cfg, equipos, lugares, salas)}
 {_tarjeta_tandas(cfg, participantes, lugares)}

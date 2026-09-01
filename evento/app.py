@@ -165,7 +165,10 @@ def ver_participante(token: str):
     premios = db.ganadores(clasif) if (cfg.get("resultado_final") or "").strip() else None
     return paginas.render_participante(
         cfg=cfg, p=p, equipo=equipo, companeros=companeros,
-        agenda=db.agenda_para(p["equipo_id"]), lugares=db.listar_lugares(),
+        agenda=db.agenda_para(p["equipo_id"],
+                              sala=(equipo or {}).get("sala") or "",
+                              tanda=(p.get("tanda") or "").strip()),
+        lugares=db.listar_lugares(),
         referencia=db.hoy(), lugar_escape=lugar_escape,
         lugar_karts=lugar_karts, clasif=clasif,
         hora_actual=_hora_si_es_hoy(cfg), corre_final=p["id"] in final["ids"],

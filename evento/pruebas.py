@@ -395,6 +395,37 @@ r = c.post("/admin/restaurar", data={"fichero": (io.BytesIO(b"no soy una copia")
 ok("no es una copia" in r.text, "un fichero que no es una copia se rechaza")
 
 
+# ------------------------------------------- 9a. El programa lleva TODO el día
+titulo("El programa del día lo lleva todo")
+db.guardar_config({"escape_hora": "08:40", "escape_titulo": "Escape room",
+                   "karts_hora1": "11:30", "karts_hora2": "12:00",
+                   "karts_hora3": "12:45", "karts_nombre": "Karts"})
+piloto = next(p for p in db.listar_participantes() if (p["tanda"] or "") == "2")
+programa = db.agenda_para(piloto["equipo_id"], sala="Luxor", tanda="2")
+horas = [i["hora"] for i in programa]
+ok(horas == sorted(horas), f"sale ordenado por hora: {horas}")
+ok("08:40" in horas, "la escape room está en el programa")
+ok(all(h in horas for h in ("11:30", "12:00", "12:45")), "y las tres tandas de karts")
+suya = next(i for i in programa if i["hora"] == "12:00")
+ok("Te toca a ti" in suya["descripcion"], "y su tanda viene señalada")
+otra = next(i for i in programa if i["hora"] == "11:30")
+ok("Te toca a ti" not in otra["descripcion"], "las de los demás, no")
+escape = next(i for i in programa if i["hora"] == "08:40")
+ok("Luxor" in escape["descripcion"], "en la escape sale su sala")
+
+# Lo puesto a mano manda: si ya hay algo a esa hora, no se duplica
+db.crear_actividad("11:30", "", "Karts (lo pongo yo)", "", None, None)
+horas2 = [i["hora"] for i in db.agenda_para(piloto["equipo_id"], tanda="2")]
+ok(horas2.count("11:30") == 1, "una actividad puesta a mano no se duplica")
+ok("Karts (lo pongo yo)" in [i["actividad"] for i in
+                             db.agenda_para(piloto["equipo_id"], tanda="2")],
+   "y es la del organizador la que se queda")
+
+# Y en la página del participante se ve de verdad
+pagina = c.get(f"/p/{piloto['token']}").text
+ok("08:40" in pagina and "12:45" in pagina,
+   "el participante ve las horas en su programa")
+
 # ------------------------------------------------ 9b. El encargo del capitán
 titulo("El capitán sabe de qué se encarga")
 capitan = db.participante(db.listar_equipos()[0]["capitan_id"])

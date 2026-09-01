@@ -1157,7 +1157,49 @@ def listar_agenda() -> list[dict]:
     return [dict(f) for f in filas]
 
 
-def agenda_para(equipo_id: int | None) -> list[dict]:
+ORDINALES = {"1": "1ª", "2": "2ª", "3": "3ª"}
+
+
+def _cita(hora: str, titulo: str, descripcion: str, lugar_id, lugares) -> dict:
+    """Una actividad que no está en la tabla de agenda, sino en la configuración."""
+    lugar = next((l for l in lugares if str(l["id"]) == str(lugar_id or "")), None)
+    return {"id": None, "hora": hora, "hora_fin": "", "actividad": titulo,
+            "descripcion": descripcion, "lugar_id": lugar["id"] if lugar else None,
+            "equipo_id": None,
+            "lugar_nombre": lugar["nombre"] if lugar else "",
+            "lugar_direccion": lugar["direccion"] if lugar else "",
+            "lugar_maps": lugar["maps"] if lugar else "",
+            "equipo_nombre": None, "equipo_color": None, "equipo_emoji": None}
+
+
+def citas_de_la_configuracion(sala: str = "", tanda: str = "") -> list[dict]:
+    """La escape room y las tandas de karts, sacadas de ⚙️ Evento.
+
+    Sus horas se configuran ahí, no en la agenda, y antes eso hacía que no
+    aparecieran en el programa del día: se veía solo la comida. Se generan
+    aquí para que programa y configuración no puedan descuadrarse nunca.
+    """
+    cfg = leer_config()
+    lugares = listar_lugares()
+    citas = []
+    hora_escape = (cfg.get("escape_hora") or "").strip()
+    if hora_escape:
+        citas.append(_cita(
+            hora_escape, cfg.get("escape_titulo") or "Escape room",
+            f"Vuestra sala: {sala}" if sala else "",
+            cfg.get("escape_lugar_id"), lugares))
+    for numero in ("1", "2", "3"):
+        hora = (cfg.get(f"karts_hora{numero}") or "").strip()
+        if not hora:
+            continue
+        citas.append(_cita(
+            hora, f'{cfg.get("karts_nombre") or "Karts"} · {ORDINALES[numero]} tanda',
+            "👉 Te toca a ti" if tanda == numero else "",
+            cfg.get("karts_lugar_id"), lugares))
+    return citas
+
+
+def agenda_para(equipo_id: int | None, sala: str = "", tanda: str = "") -> list[dict]:
     """Agenda que ve un participante: lo general + lo específico de su equipo."""
     con = conexion()
     if equipo_id is None:
@@ -1171,7 +1213,12 @@ def agenda_para(equipo_id: int | None) -> list[dict]:
             (equipo_id,),
         ).fetchall()
     con.close()
-    return [dict(f) for f in filas]
+    items = [dict(f) for f in filas]
+    # Si alguien ya puso a mano una actividad a esa hora, se respeta la suya
+    horas_puestas = {(i["hora"] or "").strip() for i in items}
+    items += [c for c in citas_de_la_configuracion(sala, tanda)
+              if c["hora"] not in horas_puestas]
+    return sorted(items, key=lambda i: ((i["hora"] or "99:99"), i["id"] or 0))
 
 
 def actividad(actividad_id: int) -> dict | None:
