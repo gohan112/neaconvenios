@@ -27,6 +27,30 @@ if [ -z "$PROYECTO" ] || [ "$PROYECTO" = "(unset)" ]; then
 fi
 echo ">> Proyecto: $PROYECTO · servicio: $SERVICIO ($REGION)"
 
+# Un proyecto de Google Cloud no tiene por qué tener Firebase: si se creó
+# desde la consola de Cloud, no lo tiene, y entonces Hosting no existe ahí.
+echo ">> 0/3 Comprobando que el proyecto tiene Firebase…"
+if ! firebase projects:list 2>/dev/null | grep -q "[^a-z0-9-]$PROYECTO[^a-z0-9-]"; then
+  echo ""
+  echo "  «$PROYECTO» no aparece entre tus proyectos de Firebase."
+  echo "  Es normal si lo creaste desde la consola de Google Cloud: entonces es"
+  echo "  un proyecto de Cloud a secas y hay que añadirle Firebase. Se hace una"
+  echo "  vez, no toca nada de lo que ya funciona (ni Cloud Run, ni la base):"
+  echo ""
+  echo "   1. Entra en https://console.firebase.google.com"
+  echo "      con la MISMA cuenta que usas aquí:"
+  echo "         $(gcloud config get-value account 2>/dev/null || echo '?')"
+  echo "   2. «Añadir proyecto»."
+  echo "   3. En el hueco del nombre NO escribas uno nuevo: despliega la lista"
+  echo "      y elige «$PROYECTO», que ya existe."
+  echo "   4. Analytics: no hace falta. Terminar."
+  echo "   5. Vuelve aquí y repite:  bash deploy/dominio.sh"
+  echo ""
+  echo "  Mientras tanto la app sigue funcionando en su dirección larga."
+  exit 1
+fi
+echo "   bien"
+
 echo ">> 1/3 Pidiendo el nombre «$SITIO»…"
 if firebase hosting:sites:list --project "$PROYECTO" 2>/dev/null | grep -q "[^a-z0-9-]$SITIO[^a-z0-9-]"; then
   echo "   ya era tuyo"
