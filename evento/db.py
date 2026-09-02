@@ -59,6 +59,9 @@ CONFIG_DEFECTO = {
                     "Infamia: un submarino japonés es el primero en llegar a "
                     "Pearl Harbor",
     "escape_lugar_id": "",
+    # Hasta esta fecha y hora, cada uno ve su equipo pero NO quién va con él.
+    # Vacío = se ve desde el primer momento. Formato «2026-09-11T20:00».
+    "equipos_desde": "",
     # Lo que hay que saber para llegar bien (aparcar, margen…). Sale junto a la hora.
     "escape_nota": "",
     # Puntos de la escape room por orden de salida (1º, 2º, 3º…)
@@ -142,6 +145,25 @@ def ahora() -> str:
 def hoy() -> date:
     dt = datetime.now(_TZ) if _TZ else datetime.now()
     return dt.date()
+
+
+def companeros_a_la_vista() -> bool:
+    """¿Se puede ver ya quién va en cada equipo?
+
+    Si se van descubriendo de uno en uno se nota el orden en que abre la
+    gente; con una hora fija se destapan todos a la vez.
+    """
+    cuando = (leer_config().get("equipos_desde") or "").strip()
+    if not cuando:
+        return True
+    try:
+        limite = datetime.fromisoformat(cuando)
+    except ValueError:
+        return True                      # una fecha mal escrita no bloquea nada
+    ahora_ = datetime.now(_TZ) if _TZ else datetime.now()
+    if limite.tzinfo is None and ahora_.tzinfo is not None:
+        limite = limite.replace(tzinfo=ahora_.tzinfo)
+    return ahora_ >= limite
 
 
 def conexion() -> sqlite3.Connection:

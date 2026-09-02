@@ -426,6 +426,47 @@ lista = c.get("/admin/enlaces").text
 ok("Un solo mensaje para todos" in lista, "el panel ofrece la lista de códigos")
 ok(all(x in lista for x in codigos), "con los códigos de los 18")
 
+# ----------------------------------- 8c. Los compañeros, hasta que toque, secretos
+titulo("Los compañeros no se ven antes de tiempo")
+def tarjeta_equipo(texto: str) -> str:
+    """Solo el trozo de la tarjeta «Tu equipo»: en la clasificación de karts
+    salen los nombres de todos, pero ahí no se dice de qué equipo es cada uno."""
+    i = texto.find('id="chips-equipo"')
+    return texto[max(0, i - 900):i + 900] if i >= 0 else ""
+
+
+alguien = next(p for p in db.listar_participantes() if p["equipo_id"])
+companero = next(m for m in db.miembros(alguien["equipo_id"])
+                 if m["id"] != alguien["id"])
+db.marcar_revelado(alguien["id"])
+db.marcar_revelado(companero["id"])
+
+db.guardar_config({"equipos_desde": ""})
+pagina = c.get(f"/p/{alguien['token']}").text
+ok(paginas.nombre_corto(companero) in tarjeta_equipo(pagina),
+   f"sin hora puesta, {paginas.nombre_corto(companero)} se ve desde ya")
+
+db.guardar_config({"equipos_desde": "2026-09-11T20:00"})
+pagina = c.get(f"/p/{alguien['token']}").text
+ok(paginas.nombre_corto(companero) not in tarjeta_equipo(pagina),
+   "con la hora puesta, el compañero desaparece de su equipo")
+ok("Todavía es secreto" in pagina, "y se dice que aún es secreto")
+ok("viernes 11 de septiembre a las 20:00" in pagina,
+   "diciendo cuándo se destapa, en cristiano")
+# Y por la puerta de atrás tampoco: el refresco en directo no lo puede filtrar
+datos = c.get(f"/p/{alguien['token']}/equipo.json").get_json()
+ok(datos["dentro"] == [], "ni el refresco en directo lo suelta")
+ok(datos["pendientes"] == len(db.miembros(alguien["equipo_id"])),
+   "salen todos como incógnita")
+
+db.guardar_config({"equipos_desde": "2020-01-01T00:00"})
+ok(paginas.nombre_corto(companero) in tarjeta_equipo(c.get(f"/p/{alguien['token']}").text),
+   "pasada la hora, se ve normal")
+db.guardar_config({"equipos_desde": "no es una fecha"})
+ok(paginas.nombre_corto(companero) in tarjeta_equipo(c.get(f"/p/{alguien['token']}").text),
+   "y una fecha mal escrita no deja a nadie a oscuras")
+db.guardar_config({"equipos_desde": ""})
+
 # ------------------------------------------- 9a. El programa lleva TODO el día
 titulo("El programa del día lo lleva todo")
 db.guardar_config({"escape_hora": "08:40", "escape_titulo": "Escape room",

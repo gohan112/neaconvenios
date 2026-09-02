@@ -177,7 +177,8 @@ def ver_participante(token: str):
         hora_actual=_hora_si_es_hoy(cfg), corre_final=p["id"] in final["ids"],
         pasa_por_tiempo=any(x["id"] == p["id"] for x in final["por_tiempo"]),
         faltan_tiempos=len(final["pendientes"]),
-        ganadores=premios, avisos=_avisos(),
+        ganadores=premios, compis_visibles=db.companeros_a_la_vista(),
+        avisos=_avisos(),
     )
 
 
@@ -190,10 +191,13 @@ def equipo_json(token: str):
     miembros = db.miembros(p["equipo_id"])
     equipo = db.equipo(p["equipo_id"]) or {}
     color = equipo.get("color") or "#CC0C18"
-    dentro = [{"n": paginas.nombre_corto(m), "ini": paginas.iniciales(m),
-               "yo": m["id"] == p["id"],
-               "cap": m["id"] == equipo.get("capitan_id")}
-              for m in miembros if m.get("revelado_en")]
+    if db.companeros_a_la_vista():
+        dentro = [{"n": paginas.nombre_corto(m), "ini": paginas.iniciales(m),
+                   "yo": m["id"] == p["id"],
+                   "cap": m["id"] == equipo.get("capitan_id")}
+                  for m in miembros if m.get("revelado_en")]
+    else:
+        dentro = []          # hasta la hora, ni por aquí se sabe quién va con quién
     pendientes = len(miembros) - len(dentro)
     return jsonify(dentro=dentro, pendientes=pendientes, color=color,
                    tinta=paginas.color_texto(color),
@@ -1018,6 +1022,7 @@ def admin_evento_guardar():
         "msg_whatsapp": request.form.get("msg_whatsapp", ""),
         "msg_asunto": request.form.get("msg_asunto", ""),
         "escape_nota": request.form.get("escape_nota", ""),
+        "equipos_desde": request.form.get("equipos_desde", ""),
     })
     flash("Datos del evento guardados.", "ok")
     return redirect("/admin/evento")

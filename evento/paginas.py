@@ -845,7 +845,19 @@ def _chip_miembro(m: dict, p: dict, color: str, capitan_id) -> str:
             f'{e(nombre_corto(m))}</span>')
 
 
-def _bloque_equipo(p: dict, equipo: dict | None, companeros: list[dict]) -> str:
+def momento_bonito(iso: str) -> str:
+    """«2026-09-11T20:00» → «el viernes 11 de septiembre a las 20:00»."""
+    from datetime import datetime as _dt
+    try:
+        d = _dt.fromisoformat((iso or "").strip())
+    except ValueError:
+        return "más adelante"
+    return (f"el {DIAS[d.weekday()]} {d.day} de {MESES[d.month - 1]} "
+            f"a las {d.hour:02d}:{d.minute:02d}")
+
+
+def _bloque_equipo(p: dict, equipo: dict | None, companeros: list[dict],
+                   compis_visibles: bool = True, revelacion: str = "") -> str:
     if not equipo:
         return """
 <div class="tarjeta">
@@ -856,6 +868,28 @@ def _bloque_equipo(p: dict, equipo: dict | None, companeros: list[dict]) -> str:
 </div>"""
     color = equipo.get("color") or "#CC0C18"
     emoji = e(equipo.get("emoji"))
+    descripcion = (f'<p style="margin:0;opacity:.9">{e(equipo.get("descripcion"))}</p>'
+                   if equipo.get("descripcion") else "")
+    cabecera = f"""
+  <div class="equipo-cabecera">
+    <div class="etiqueta">Tu equipo</div>
+    <div class="equipo-nombre">{emoji} {e(equipo['nombre'])}</div>
+    {descripcion}
+  </div>"""
+
+    # Con hora de revelación puesta, hasta que llegue nadie ve con quién va:
+    # si se fueran descubriendo de uno en uno se notaría el orden en que abre
+    # cada cual. Así se destapan todos a la vez y hay su momento.
+    if not compis_visibles:
+        return f"""
+<div class="tarjeta">{cabecera}
+  <div class="etiqueta">Tus compañeros</div>
+  <div id="chips-equipo">{'<span class="chip incognita">?</span>' * len(companeros)}</div>
+  <p style="margin:10px 0 0;font-size:17px"><strong>🔒 Todavía es secreto.</strong></p>
+  <p class="silencio" id="contador-equipo" style="margin:6px 0 0" aria-live="polite">
+  Se destapa {e(revelacion)}, y lo veréis todos a la vez.</p>
+</div>"""
+
     # Solo se muestran los compañeros que YA pasaron por el sorteo; el resto
     # son incógnitas que se van desvelando en directo (la página se refresca sola).
     dentro = [m for m in companeros if m.get("revelado_en")]
@@ -864,15 +898,8 @@ def _bloque_equipo(p: dict, equipo: dict | None, companeros: list[dict]) -> str:
     chips = "".join(_chip_miembro(m, p, color, equipo.get("capitan_id")) for m in dentro)
     chips += ('<span class="chip incognita" title="Aún no ha pasado por el sorteo">?'
               '</span>') * pendientes
-    descripcion = (f'<p style="margin:0;opacity:.9">{e(equipo.get("descripcion"))}</p>'
-                   if equipo.get("descripcion") else "")
     return f"""
-<div class="tarjeta">
-  <div class="equipo-cabecera">
-    <div class="etiqueta">Tu equipo</div>
-    <div class="equipo-nombre">{emoji} {e(equipo['nombre'])}</div>
-    {descripcion}
-  </div>
+<div class="tarjeta">{cabecera}
   <div class="etiqueta">El equipo
     <span class="en-directo" style="float:right;text-transform:none;letter-spacing:0">
     <span class="pulso"></span> en directo</span>
@@ -1355,7 +1382,9 @@ def render_participante(cfg: dict, p: dict, equipo: dict | None,
                         pasa_por_tiempo: bool = False,
                         faltan_tiempos: int = 0,
                         ganadores: dict | None = None,
+                        compis_visibles: bool = True,
                         avisos=None) -> str:
+    texto_revelacion = momento_bonito(cfg.get("equipos_desde") or "")
     contador = cuenta_atras(cfg.get("fecha", ""), referencia)
     chip = f'<span class="fecha-chip">{e(contador)}</span>' if contador else ""
     color_equipo = (equipo.get("color") or "#CC0C18") if equipo else None
@@ -1671,7 +1700,7 @@ def render_participante(cfg: dict, p: dict, equipo: dict | None,
 <nav class="pestanas" role="tablist" aria-label="Secciones">{pestanas}</nav>
 <div class="panel-pestana{' activa' if inicial == 'equipo' else ''}"
      id="panel-equipo" role="tabpanel">
-  {_bloque_equipo(p, equipo, companeros)}
+  {_bloque_equipo(p, equipo, companeros, compis_visibles, texto_revelacion)}
 </div>
 <div class="panel-pestana{' activa' if inicial == 'programa' else ''}"
      id="panel-programa" role="tabpanel">
@@ -2480,6 +2509,12 @@ def _tarjeta_salas(cfg: dict, equipos: list[dict], lugares: list[dict],
       <div><label>Lugar</label>
         <select name="escape_lugar_id">{opciones_lugar}</select></div>
     </div>
+    <label>Los compañeros de equipo no se ven hasta…</label>
+    <input name="equipos_desde" type="datetime-local"
+           value="{e(cfg.get('equipos_desde'))}">
+    <div class="silencio" style="margin-top:4px">Cada uno ve SU equipo desde el
+    primer momento, pero con quién va no se destapa hasta esa hora, y entonces
+    se destapa para todos a la vez. Déjalo vacío para que se vean desde ya.</div>
     <label>Aviso de llegada (sale junto a la hora, en la tarjeta y en el programa)</label>
     <input name="escape_nota" value="{e(cfg.get('escape_nota'))}" style="width:100%"
            placeholder="mejor ya aparcados, para empezar sin prisas">
