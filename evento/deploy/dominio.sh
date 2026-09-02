@@ -62,8 +62,11 @@ else
 fi
 
 echo ">> 2/3 Preparando la configuración…"
-RECETA="$(mktemp -t firebase-neaevento-XXXXXX.json)"
+# La receta tiene que vivir JUNTO a la app: Firebase busca la carpeta «public»
+# al lado del fichero de configuración, no desde donde se lanza el comando.
+RECETA="$APP_DIR/.firebase-despliegue.json"
 trap 'rm -f "$RECETA"' EXIT
+mkdir -p "$APP_DIR/hosting"
 cat > "$RECETA" <<JSON
 {
   "hosting": {
@@ -85,7 +88,7 @@ JSON
 
 echo ">> 3/3 Publicando…"
 ( cd "$APP_DIR" && firebase deploy --only hosting --project "$PROYECTO" \
-    --config "$RECETA" )
+    --config "$(basename "$RECETA")" )
 
 echo ""
 echo "============================================================"
