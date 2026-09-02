@@ -228,13 +228,20 @@ consola (una pantalla, dos clics); el script te dice dónde si falta. Y como el
 despliegue solo cambia la imagen, la contraseña del panel, el bucket de la
 copia y el número de instancias se quedan como estaban.
 
-Y si quieres un dominio corto para el WhatsApp (`https://TU-PROYECTO.web.app`
-en vez del `…run.app`), hay un `firebase.json` preparado que pone Firebase
-Hosting por delante:
+#### Una dirección corta
+
+La que da Cloud Run (`neaevento-jeak2blh5q-ew.a.run.app`) no se puede dictar.
+Con Firebase Hosting por delante queda en algo repartible:
 
 ```bash
-firebase deploy --only hosting --project TU-PROYECTO
+cd evento && bash deploy/dominio.sh          # → https://neaevento.web.app
+bash deploy/dominio.sh el-nombre-que-sea     # si prefieres otro
 ```
+
+Pide ese nombre; si está cogido usa el del proyecto y sigue. No mueve la app:
+la dirección larga sigue funcionando, esto es otra puerta al mismo sitio.
+Después hay que poner la nueva en ⚙️ Evento como URL pública (los códigos de
+cada participante no cambian).
 
 (La app guarda la sesión del panel en la cookie `__session` justamente por
 esto: es la única que Firebase Hosting deja pasar hasta Cloud Run.)
@@ -275,7 +282,8 @@ Después, en el panel **⚙️ Evento**, pon la **URL pública** (p. ej.
 | `deploy/autodespliegue.sh` | Deja Cloud Run actualizándose solo con cada cambio |
 | `cloudbuild.yaml` | Receta de ese automatismo: pruebas → imagen → despliegue |
 | `Dockerfile.nube` | Imagen para Cloud Run: la app + Litestream (copia al bucket) |
-| `firebase.json` | Opcional: Firebase Hosting delante, para un dominio corto |
+| `deploy/dominio.sh` | Deja la app en una dirección corta (…web.app) |
+| `firebase.json` | Configuración de eso mismo, por si se hace a mano |
 
 ## Notas de diseño
 
