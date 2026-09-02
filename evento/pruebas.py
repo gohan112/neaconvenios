@@ -395,6 +395,37 @@ r = c.post("/admin/restaurar", data={"fichero": (io.BytesIO(b"no soy una copia")
 ok("no es una copia" in r.text, "un fichero que no es una copia se rechaza")
 
 
+# --------------------------------------------- 8b. Códigos que se pueden dictar
+titulo("Los códigos se pueden leer y teclear")
+codigos = [p["token"] for p in db.listar_participantes()]
+ok(all(len(x) == 6 for x in codigos), f"seis caracteres: {codigos[:3]}")
+ok(all(x.isupper() or x.isdigit() for x in "".join(codigos)),
+   "todo mayúsculas y números")
+prohibidas = set("IO01") & set("".join(codigos))
+ok(not prohibidas, f"sin letras que se confundan (había {prohibidas or 'ninguna'})")
+ok(len(set(codigos)) == len(codigos), "y ninguno repetido")
+
+uno = db.listar_participantes()[0]
+for escrito, como in ((uno["token"].lower(), "en minúsculas"),
+                      (f' {uno["token"][:3]}-{uno["token"][3:]} ', "con guion y espacios"),
+                      (uno["token"], "tal cual")):
+    ok(db.participante_por_token(escrito)["id"] == uno["id"],
+       f"entra escribiéndolo {como}")
+ok(db.participante_por_token("NOEXISTE") is None, "y un código inventado no entra")
+
+# Desde la portada, escribiendo el código a mano
+r = c.post("/ir", data={"codigo": uno["token"].lower()}, follow_redirects=False)
+ok(uno["token"] in r.headers.get("Location", ""), "la portada lleva a su página")
+# Y pegando el enlace entero, que es lo que hará más de uno
+r = c.post("/ir", data={"codigo": f"https://lo-que-sea/p/{uno['token']}"},
+           follow_redirects=False)
+ok(uno["token"] in r.headers.get("Location", ""), "y también si pega el enlace entero")
+
+# La lista para mandar de una vez
+lista = c.get("/admin/enlaces").text
+ok("Un solo mensaje para todos" in lista, "el panel ofrece la lista de códigos")
+ok(all(x in lista for x in codigos), "con los códigos de los 18")
+
 # ------------------------------------------- 9a. El programa lleva TODO el día
 titulo("El programa del día lo lleva todo")
 db.guardar_config({"escape_hora": "08:40", "escape_titulo": "Escape room",

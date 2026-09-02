@@ -205,9 +205,21 @@ def normalizar_hora(texto: str) -> str:
     return (texto or "").strip()
 
 
+# Sin I, O, 0 ni 1: son las que se confunden al leer un código en voz alta o
+# al copiarlo de un papel. Con 32 letras y 6 huecos salen mil millones de
+# combinaciones, de sobra para que nadie acierte el de otro por casualidad.
+LETRAS_CODIGO = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+
+
+def normalizar_codigo(texto: str) -> str:
+    """«k7 rq-4m» → «K7RQ4M». Así da igual cómo lo teclee cada uno."""
+    return "".join(c for c in (texto or "").upper()
+                   if c.isalnum())
+
+
 def _token_nuevo(con: sqlite3.Connection) -> str:
     while True:
-        token = secrets.token_urlsafe(6)  # 8 caracteres, aptos para URL
+        token = "".join(secrets.choice(LETRAS_CODIGO) for _ in range(6))
         if not con.execute("SELECT 1 FROM participantes WHERE token = ?", (token,)).fetchone():
             return token
 
@@ -940,10 +952,19 @@ def participante(participante_id: int) -> dict | None:
 
 
 def participante_por_token(token: str) -> dict | None:
+    """Busca por código. Primero tal cual (enlaces antiguos, que distinguen
+    mayúsculas) y si no, sin distinguir mayúsculas ni guiones: quien teclea
+    «k7 rq-4m» quiere entrar igual que quien escribe «K7RQ4M»."""
     con = conexion()
     fila = con.execute(
         "SELECT * FROM participantes WHERE token = ?", ((token or "").strip(),)
     ).fetchone()
+    if fila is None:
+        limpio = normalizar_codigo(token)
+        if limpio:
+            fila = con.execute(
+                "SELECT * FROM participantes WHERE upper(token) = ?", (limpio,)
+            ).fetchone()
     con.close()
     return dict(fila) if fila else None
 

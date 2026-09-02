@@ -126,7 +126,10 @@ def portada():
 
 @app.post("/ir")
 def ir_con_codigo():
-    codigo = (request.form.get("codigo") or "").strip().split("/")[-1]
+    # Vale tanto el código a secas como el enlace entero pegado, con o sin
+    # espacios, guiones y en la caja que sea.
+    codigo = db.normalizar_codigo(
+        (request.form.get("codigo") or "").strip().split("?")[0].split("/")[-1])
     return redirect(f"/p/{codigo}" if codigo else "/")
 
 
@@ -939,7 +942,8 @@ def _filas_enlaces(url_base: str) -> list[dict]:
                       "email": p["email"], "equipo": p.get("equipo_nombre") or "",
                       "tanda": p.get("tanda") or "",
                       "confirmado": p["confirmado"], "visto_en": p.get("visto_en"),
-                      "enlace": enlace, "wa": wa, "correo": correo})
+                      "enlace": enlace, "wa": wa, "correo": correo,
+                      "token": p["token"]})
     return filas
 
 
@@ -949,8 +953,12 @@ def admin_enlaces():
     url_base, definida = _url_base()
     filas = _filas_enlaces(url_base)
     texto_todos = "\n".join(f"{f['nombre']}: {f['enlace']}" for f in filas)
+    ancho = max((len(f["nombre"]) for f in filas), default=0)
+    texto_codigos = "\n".join(
+        f"{f['nombre'].ljust(ancho)}  {f['token']}" for f in filas)
     return paginas.render_enlaces(
         filas_datos=filas, url_base=url_base, url_definida=definida,
+        texto_codigos=texto_codigos,
         url_navegador=request.url_root.rstrip("/"),
         texto_todos=texto_todos, avisos=_avisos(), sin_password=_sin_password(),
     )

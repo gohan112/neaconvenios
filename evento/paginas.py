@@ -646,14 +646,16 @@ def render_portada(cfg: dict, referencia: date) -> str:
 </div>
 <div class="tarjeta">
   <p style="margin-top:0">{e(cfg.get('descripcion'))}</p>
-  <p class="silencio">Cada participante tiene un <strong>enlace personal</strong>
-  donde ve su equipo, el programa del día y los lugares. Si no lo has recibido,
-  pide el tuyo a la organización.</p>
+  <p class="silencio">Cada participante tiene su <strong>código</strong> (seis
+  letras y números) para ver su equipo, el programa del día y los lugares.
+  Si no tienes el tuyo, pídeselo a la organización.</p>
   <form class="linea" method="post" action="/ir">
     <div style="flex:1;min-width:160px">
-      <label for="codigo">¿Tienes ya tu código?</label>
-      <input id="codigo" name="codigo" placeholder="Código del enlace" required
-             autocomplete="off" style="width:100%">
+      <label for="codigo">Tu código</label>
+      <input id="codigo" name="codigo" placeholder="K7RQ4M" required
+             autocomplete="off" autocapitalize="characters" spellcheck="false"
+             style="width:100%;text-transform:uppercase;letter-spacing:.12em;
+                    font-family:ui-monospace,monospace">
     </div>
     <button class="boton" type="submit">Entrar</button>
   </form>
@@ -2649,7 +2651,7 @@ def render_lugar_editar(lugar_: dict, avisos=None, sin_password=False) -> str:
 
 def render_enlaces(filas_datos: list[dict], url_base: str, url_definida: bool,
                    texto_todos: str, avisos=None, sin_password=False,
-                   url_navegador: str = "") -> str:
+                   url_navegador: str = "", texto_codigos: str = "") -> str:
     aviso_url = ""
     # El fallo que más caro sale: repartir 18 enlaces que apuntan a un servidor
     # que ya no existe. Si la URL fijada no es donde estás ahora mismo, se dice
@@ -2731,6 +2733,18 @@ def render_enlaces(filas_datos: list[dict], url_base: str, url_definida: bool,
     <summary>Ver todos los enlaces en texto (para copiar y pegar)</summary>
     <textarea rows="8" style="width:100%" readonly>{e(texto_todos)}</textarea>
   </details>
+</div>
+<div class="tarjeta">
+  <h2>🔢 Un solo mensaje para todos</h2>
+  <p style="margin-top:0">Si prefieres no mandar 18 mensajes, pasa esta lista al
+  grupo. Cada uno entra en <code>{e(url_base)}</code>, escribe su código y ya está
+  en su página — la misma que con el enlace.</p>
+  <textarea rows="10" style="width:100%;font-family:ui-monospace,monospace"
+            readonly>{e(texto_codigos)}</textarea>
+  <p class="silencio" style="margin-bottom:0">Los códigos no distinguen mayúsculas
+  ni espacios, y no llevan letras que se confundan (ni O ni 0, ni I ni 1). Ojo a
+  una cosa: en una lista compartida cualquiera puede entrar con el código de otro,
+  así que si prefieres que cada uno solo tenga el suyo, usa los enlaces de arriba.</p>
 </div>
 """
     return pagina_admin("Enlaces", "/admin/enlaces", cuerpo, avisos=avisos,
