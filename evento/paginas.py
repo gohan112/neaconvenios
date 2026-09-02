@@ -502,6 +502,9 @@ GUION_SORTEO = """
   var nombreEq = document.getElementById('sorteo-equipo');
   var resultado = document.getElementById('sorteo-resultado');
   var intro = document.getElementById('sorteo-intro');
+  var calma = false;
+  try { calma = window.matchMedia('(prefers-reduced-motion: reduce)').matches; }
+  catch (e) {}
 
   function pinta(i){
     var eq = EQUIPOS[i];
@@ -511,27 +514,53 @@ GUION_SORTEO = """
     nombreEq.textContent = eq.nombre;
     nombreEq.style.color = eq.color;
   }
+
+  // Sonido de máquina tragaperras, sintetizado: ni ficheros ni descargas. El
+  // navegador lo permite porque viene de un clic del usuario.
+  var audio = null;
+  function nota(hz, dur, forma, vol, cuando){
+    if (calma) return;
+    try {
+      if (!audio) audio = new (window.AudioContext || window.webkitAudioContext)();
+      var t0 = audio.currentTime + (cuando || 0);
+      var o = audio.createOscillator(), g = audio.createGain();
+      o.type = forma || 'square';
+      o.frequency.setValueAtTime(hz, t0);
+      g.gain.setValueAtTime(vol || 0.05, t0);
+      g.gain.exponentialRampToValueAtTime(0.0001, t0 + (dur || 0.05));
+      o.connect(g); g.connect(audio.destination);
+      o.start(t0); o.stop(t0 + (dur || 0.05) + 0.02);
+    } catch (e) {}
+  }
+
   function confeti(color){
-    for (var i = 0; i < 30; i++){
+    for (var i = 0; i < 46; i++){
       var s = document.createElement('span');
       s.className = 'confeti';
       s.style.background = (i % 3 === 0) ? '#E8A013' : color;
-      s.style.setProperty('--dx', (Math.random() * 340 - 170) + 'px');
-      s.style.setProperty('--dy', (Math.random() * -320 - 60) + 'px');
+      s.style.setProperty('--dx', (Math.random() * 380 - 190) + 'px');
+      s.style.setProperty('--dy', (Math.random() * -360 - 70) + 'px');
       document.body.appendChild(s);
-      (function(el){ setTimeout(function(){ el.remove(); }, 1300); })(s);
+      (function(el){ setTimeout(function(){ el.remove(); }, 1400); })(s);
     }
   }
+
   function acaba(){
     caja.classList.remove('girando');
     caja.classList.add('ganador');
     try { if (navigator.vibrate) navigator.vibrate([90, 40, 140]); } catch (e) {}
+    // Acorde de premio: do, mi, sol, do
+    nota(523, .16, 'triangle', .07, 0);
+    nota(659, .16, 'triangle', .07, .10);
+    nota(784, .16, 'triangle', .07, .20);
+    nota(1047, .55, 'triangle', .09, .30);
     confeti(EQUIPOS[FINAL].color);
     resultado.style.display = 'block';
     // el .catch hace falta: si falla la red, un try/catch no atrapa la promesa
     try { fetch(RUTA_REVELADO, {method: 'POST', keepalive: true})
             .catch(function(){}); } catch (e) {}
   }
+
   boton.addEventListener('click', function(){
     boton.style.display = 'none';
     if (intro) intro.style.display = 'none';
@@ -542,14 +571,32 @@ GUION_SORTEO = """
     caja.style.opacity = '1';
     caja.style.animationDelay = '0s';
     caja.classList.add('girando');
+
     var n = EQUIPOS.length;
-    var total = 4 * n + FINAL + 1;   // acaba exactamente en FINAL
-    var i = -1, paso = 0, retardo = 70;
+    // La baldosa avanza de uno en uno, así que tras «total» pasos se queda en
+    // (total-1) % n. Se elige el total más cercano a 34 que caiga en FINAL:
+    // así son ~11 vueltas, que es lo que hace que parezca de verdad al azar.
+    var total = 25 + (((FINAL + 1 - 25) % n) + n) % n;
+    if (calma) total = FINAL + 1;          // sin mareos para quien lo pide
+    // Los milisegundos de los últimos pasos, a mano: una curva calculada se
+    // dispara enseguida y el sorteo se hacía eterno (once segundos).
+    var FRENADA = [95, 145, 215, 320, 470, 690];
+    var AMAGO = 2;                          // dónde se hace el amago
+
+    var i = -1, paso = 0;
     function tic(){
       paso++; i = (i + 1) % n; pinta(i);
       if (paso >= total){ acaba(); return; }
-      retardo *= (paso > total - n) ? 1.35 : 1.05;  // última vuelta, frenazo
-      setTimeout(tic, retardo);
+      var quedan = total - paso;
+      var espera = (quedan > FRENADA.length)
+        ? 42                                       // giro rápido y constante
+        : FRENADA[FRENADA.length - quedan];        // frenazo
+      // El amago: se queda casi parado en otro equipo y da un último salto.
+      // Es lo que convence de que podía haber salido cualquiera.
+      if (quedan === AMAGO) espera += 520;
+      nota(quedan <= FRENADA.length ? 760 + (FRENADA.length - quedan) * 60 : 700,
+           .035, 'square', .04);
+      setTimeout(tic, espera);
     }
     tic();
   });
