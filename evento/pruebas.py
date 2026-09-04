@@ -456,8 +456,10 @@ try:
     gente = db.listar_participantes()
     for eq in db.listar_equipos():
         roles = [p["rol"] for p in gente if p["equipo_id"] == eq["id"]]
-        c, tc = roles.count("comercial"), roles.count("tecnico")
-        ok(abs(c - tc) <= 2, f'{eq["nombre"]}: {c} comerciales / {tc} técnicos')
+        # ojo con los nombres: «c» es el navegador de las pruebas
+        n_com, n_tec = roles.count("comercial"), roles.count("tecnico")
+        ok(abs(n_com - n_tec) <= 2,
+           f'{eq["nombre"]}: {n_com} comerciales / {n_tec} técnicos')
     ok(len({p["equipo_id"] for p in gente
             if (p["grupo_sorteo"] or "") == "G1"}) == 1,
        "y los cinco que iban juntos siguen juntos")
