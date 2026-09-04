@@ -85,10 +85,18 @@ printf '%s\n' "$GENS" | sed 's/^/     /'
 
 if [ -n "$FORZAR" ]; then GENS="$FORZAR"; echo ""; echo ">> Solo la que has pedido: $FORZAR"; fi
 
-MEJOR=""; MEJOR_N=-1; MEJOR_VIDA=-1
+# Cuándo se escribió por última vez en cada generación. Es el dato que manda:
+# quedarse con la que MÁS GENTE tenga engaña, porque una copia vieja puede
+# llevar gente de prueba y ser justo la que no quieres.
+CUANDO="$TRABAJO/cuando.txt"
+"$LITESTREAM" generations "gcs://$BUCKET/$RUTA" 2>/dev/null \
+  | awk 'NR>1 && NF>=5 {print $2, $NF}' > "$CUANDO" || true
+fecha_de(){ grep -m1 "^$1 " "$CUANDO" 2>/dev/null | awk '{print $2}'; }
+
+MEJOR=""; MEJOR_FECHA=""
 echo ""
 echo ">> Probando cada una (esto no cambia nada). Puede tardar un par de minutos:"
-printf '     %-18s %5s %5s %7s %6s   %s\n' generación gente equipos sorteos tiempos "último movimiento"
+printf '     %-18s %5s %5s %7s %6s  %-20s %s\n' generación gente equipos sorteos tiempos "guardada el" "último movimiento"
 for G in $GENS; do
   SALIDA="$TRABAJO/$G.db"
   if ! "$LITESTREAM" restore -generation "$G" -o "$SALIDA" \
@@ -110,16 +118,16 @@ for G in $GENS; do
           UNION ALL SELECT max(confirmado_en) FROM participantes
           UNION ALL SELECT max(visto_en) FROM participantes)")
   [ -z "$ULT" ] && ULT="—"
-  printf '     %-18s %5s %5s %7s %6s   %s\n' "$G" "$N" "$E" "$V" "$C" "$ULT"
-  # Se queda la que más gente tenga; a igualdad, la que llegó más lejos
-  VIDA="$V$C$ULT"
-  if [ "$N" -gt "$MEJOR_N" ] || { [ "$N" -eq "$MEJOR_N" ] && [ "$VIDA" \> "$MEJOR_VIDA" ]; }; then
-    MEJOR="$G"; MEJOR_N="$N"; MEJOR_VIDA="$VIDA"
+  F="$(fecha_de "$G")"; [ -z "$F" ] && F="?"
+  printf '     %-18s %5s %5s %7s %6s  %-20s %s\n' "$G" "$N" "$E" "$V" "$C" "$F" "$ULT"
+  # Manda la fecha: la copia buena es la ÚLTIMA que tenga gente dentro.
+  if [ "$N" -gt 0 ] && { [ -z "$MEJOR" ] || [ "$F" \> "$MEJOR_FECHA" ]; }; then
+    MEJOR="$G"; MEJOR_FECHA="$F"; MEJOR_N="$N"
   fi
 done
 
 echo ""
-if [ -z "$MEJOR" ] || [ "$MEJOR_N" -le 0 ]; then
+if [ -z "$MEJOR" ]; then
   echo "  Ninguna generación tiene participantes. Antes de nada, NO reinicies"
   echo "  el servicio: cada arranque nuevo escribe encima. Dímelo y lo miramos."
   exit 1
@@ -128,7 +136,7 @@ fi
 cp "$TRABAJO/$MEJOR.db" "$DESTINO"
 echo "============================================================"
 echo "  Recuperado en:  $DESTINO"
-echo "     $MEJOR_N participantes, de la generación $MEJOR"
+echo "     $MEJOR_N participantes · generación $MEJOR · guardada el $MEJOR_FECHA"
 echo ""
 echo "  Ahora:"
 echo "   1. En Cloud Shell, los tres puntos ⋮ de arriba → «Descargar»,"
