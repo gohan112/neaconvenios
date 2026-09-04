@@ -13,6 +13,24 @@
 set -euo pipefail
 
 PROYECTO="${PROYECTO:-$(gcloud config get-value project 2>/dev/null || true)}"
+if [ -z "$PROYECTO" ] || [ "$PROYECTO" = "(unset)" ]; then
+  echo "Esta sesión de Cloud Shell no tiene proyecto puesto."
+  SUELTOS="$(gcloud projects list --format 'value(projectId)' 2>/dev/null || true)"
+  if [ "$(printf '%s\n' "$SUELTOS" | grep -c .)" = "1" ]; then
+    PROYECTO="$SUELTOS"
+    echo "   Solo tienes uno, así que uso ese: $PROYECTO"
+    gcloud config set project "$PROYECTO" >/dev/null 2>&1 || true
+  else
+    echo ""
+    echo "   Tus proyectos:"
+    printf '%s\n' "$SUELTOS" | sed 's/^/      /'
+    echo ""
+    echo "   Elige uno y repite:"
+    echo "      gcloud config set project EL-QUE-SEA"
+    echo "      bash $0"
+    exit 1
+  fi
+fi
 BUCKET="${BUCKET:-${PROYECTO}-neaevento}"
 RUTA="${RUTA:-neaevento}"
 DESTINO="${DESTINO:-$HOME/rescate.db}"
@@ -21,6 +39,14 @@ TRABAJO="$(mktemp -d)"
 trap 'rm -rf "$TRABAJO"' EXIT
 
 echo ">> Bucket: gs://$BUCKET/$RUTA"
+if ! gcloud storage buckets describe "gs://$BUCKET" >/dev/null 2>&1; then
+  echo ""
+  echo "  Ese bucket no existe. Los que tienes son:"
+  gcloud storage ls 2>/dev/null | sed 's/^/     /'
+  echo ""
+  echo "  Repite indicándolo:   BUCKET=el-que-sea bash $0"
+  exit 1
+fi
 
 # Para mirar dentro de cada copia hace falta poder leer SQLite. Si no se
 # puede, se para: dar un cero cuando en realidad no se ha podido contar es
