@@ -16,10 +16,25 @@ PROYECTO="${PROYECTO:-$(gcloud config get-value project 2>/dev/null || true)}"
 BUCKET="${BUCKET:-${PROYECTO}-neaevento}"
 RUTA="${RUTA:-neaevento}"
 DESTINO="${DESTINO:-$HOME/rescate.db}"
+FORZAR="${1:-}"          # bash deploy/rescate.sh <generacion> para elegir a mano
 TRABAJO="$(mktemp -d)"
 trap 'rm -rf "$TRABAJO"' EXIT
 
 echo ">> Bucket: gs://$BUCKET/$RUTA"
+
+# Para mirar dentro de cada copia hace falta poder leer SQLite. Si no se
+# puede, se para: dar un cero cuando en realidad no se ha podido contar es
+# exactamente el fallo que nos trajo hasta aquí.
+if command -v sqlite3 >/dev/null 2>&1; then
+  consulta(){ sqlite3 "$1" "$2" 2>/dev/null; }
+elif command -v python3 >/dev/null 2>&1; then
+  consulta(){ python3 -c "import sqlite3,sys
+try: print(sqlite3.connect(sys.argv[1]).execute(sys.argv[2]).fetchone()[0])
+except Exception: print('')" "$1" "$2"; }
+else
+  echo "  Hace falta sqlite3 o python3 para poder mirar dentro de las copias."
+  exit 1
+fi
 
 if ! command -v litestream >/dev/null 2>&1; then
   echo ">> Bajando litestream (no viene en Cloud Shell)…"
@@ -42,22 +57,39 @@ if [ -z "$GENS" ]; then
 fi
 printf '%s\n' "$GENS" | sed 's/^/     /'
 
-MEJOR=""; MEJOR_N=-1
+if [ -n "$FORZAR" ]; then GENS="$FORZAR"; echo ""; echo ">> Solo la que has pedido: $FORZAR"; fi
+
+MEJOR=""; MEJOR_N=-1; MEJOR_VIDA=-1
 echo ""
-echo ">> Probando cada una (esto no cambia nada):"
+echo ">> Probando cada una (esto no cambia nada). Puede tardar un par de minutos:"
+printf '     %-18s %5s %5s %7s %6s   %s\n' generación gente equipos sorteos tiempos "último movimiento"
 for G in $GENS; do
   SALIDA="$TRABAJO/$G.db"
   if ! "$LITESTREAM" restore -generation "$G" -o "$SALIDA" \
        "gcs://$BUCKET/$RUTA" >/dev/null 2>&1; then
-    echo "     $G  ✘ no se pudo recuperar"
+    printf '     %-18s %s\n' "$G" "✘ no se pudo recuperar"
     continue
   fi
-  N=$(sqlite3 "$SALIDA" "SELECT count(*) FROM participantes" 2>/dev/null || echo 0)
-  E=$(sqlite3 "$SALIDA" "SELECT count(*) FROM equipos" 2>/dev/null || echo 0)
-  V=$(sqlite3 "$SALIDA" "SELECT count(*) FROM participantes WHERE revelado_en IS NOT NULL" 2>/dev/null || echo 0)
-  FECHA=$(date -r "$SALIDA" '+%d/%m %H:%M' 2>/dev/null || echo "?")
-  echo "     $G  → $N participantes · $E equipos · $V ya vieron su sorteo"
-  if [ "$N" -gt "$MEJOR_N" ]; then MEJOR="$G"; MEJOR_N="$N"; fi
+  N=$(consulta "$SALIDA" "SELECT count(*) FROM participantes")
+  E=$(consulta "$SALIDA" "SELECT count(*) FROM equipos")
+  V=$(consulta "$SALIDA" "SELECT count(*) FROM participantes WHERE revelado_en IS NOT NULL")
+  C=$(consulta "$SALIDA" "SELECT count(*) FROM participantes WHERE trim(coalesce(tiempo_karts,''))!=''")
+  if [ -z "$N" ]; then
+    printf '     %-18s %s\n' "$G" "✘ recuperada, pero no se puede leer (copia rota)"
+    continue
+  fi
+  # Lo más tardío que se hizo dentro: sirve para saber cuál es la más fresca
+  ULT=$(consulta "$SALIDA" "SELECT coalesce(max(x),'—') FROM (
+          SELECT max(revelado_en) x FROM participantes
+          UNION ALL SELECT max(confirmado_en) FROM participantes
+          UNION ALL SELECT max(visto_en) FROM participantes)")
+  [ -z "$ULT" ] && ULT="—"
+  printf '     %-18s %5s %5s %7s %6s   %s\n' "$G" "$N" "$E" "$V" "$C" "$ULT"
+  # Se queda la que más gente tenga; a igualdad, la que llegó más lejos
+  VIDA="$V$C$ULT"
+  if [ "$N" -gt "$MEJOR_N" ] || { [ "$N" -eq "$MEJOR_N" ] && [ "$VIDA" \> "$MEJOR_VIDA" ]; }; then
+    MEJOR="$G"; MEJOR_N="$N"; MEJOR_VIDA="$VIDA"
+  fi
 done
 
 echo ""
@@ -78,4 +110,7 @@ echo "      y escribe la ruta:   $DESTINO"
 echo "   2. En el panel: ⚙️ Evento → restaurar copia → ese fichero."
 echo ""
 echo "  Míralo antes de repartir nada: que estén los 18 y sus equipos."
+echo ""
+echo "  Si en la tabla de arriba ves otra generación que te cuadra más:"
+echo "     bash deploy/rescate.sh LA-QUE-SEA"
 echo "============================================================"
