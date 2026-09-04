@@ -426,6 +426,44 @@ lista = c.get("/admin/enlaces").text
 ok("Un solo mensaje para todos" in lista, "el panel ofrece la lista de códigos")
 ok(all(x in lista for x in codigos), "con los códigos de los 18")
 
+# ------------------------- 8a. Roles equilibrados aunque un equipo venga hecho
+titulo("Los roles se reparten aunque un grupo venga puesto de antemano")
+# Un evento aparte para no tocar el de las demás pruebas
+import sqlite3 as _sq3, tempfile as _tmp  # noqa: E402
+_ruta_real = db.RUTA_DB
+db.RUTA_DB = os.path.join(_tmp.mkdtemp(prefix="nea_roles_"), "e.db")
+try:
+    db.iniciar()
+    db.crear_equipos(["Uno", "Dos", "Tres"])
+    eqs = db.listar_equipos()
+    # Cinco que van juntos y encima casi todos del mismo rol: el caso malo
+    juntos = [("J1", "tecnico"), ("J2", "tecnico"), ("J3", "tecnico"),
+              ("J4", "tecnico"), ("J5", "comercial")]
+    for nom, rol in juntos:
+        i = db.crear_participante(nom)
+        p = db.participante(i)
+        db.editar_participante(i, nom, "", "", eqs[0]["id"], "", nom, rol, "")
+        db.conexion().close()
+        con = db.conexion(); con.execute(
+            "UPDATE participantes SET grupo_sorteo='G1' WHERE id=?", (i,))
+        con.commit(); con.close()
+    # Y trece sueltos: seis comerciales de más, como pasó de verdad
+    for n in range(13):
+        rol = "comercial" if n < 8 else "tecnico"
+        i = db.crear_participante(f"S{n}")
+        db.editar_participante(i, f"S{n}", "", "", None, "", f"S{n}", rol, "")
+    db.sortear()
+    gente = db.listar_participantes()
+    for eq in db.listar_equipos():
+        roles = [p["rol"] for p in gente if p["equipo_id"] == eq["id"]]
+        c, tc = roles.count("comercial"), roles.count("tecnico")
+        ok(abs(c - tc) <= 2, f'{eq["nombre"]}: {c} comerciales / {tc} técnicos')
+    ok(len({p["equipo_id"] for p in gente
+            if (p["grupo_sorteo"] or "") == "G1"}) == 1,
+       "y los cinco que iban juntos siguen juntos")
+finally:
+    db.RUTA_DB = _ruta_real
+
 # ----------------------------------- 8c. Los compañeros, hasta que toque, secretos
 titulo("Los compañeros no se ven antes de tiempo")
 def tarjeta_equipo(texto: str) -> str:

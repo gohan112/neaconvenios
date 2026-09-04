@@ -464,13 +464,23 @@ def sortear(todos: bool = False) -> int:
     orden = sorted((r for r in grupos_rol if r), key=lambda r: -len(grupos_rol[r]))
     if "" in grupos_rol:
         orden.append("")
-    for rol in orden:
-        for pid in grupos_rol[rol]:
-            def clave(eid: int) -> tuple[int, int]:
-                return (tam_total[eid], tam_rol.get((eid, rol), 0))
-            mejor = min(clave(eid) for eid in ids_equipos)
-            eid = random.choice([i for i in ids_equipos if clave(i) == mejor])
-            asignar(pid, eid, rol)
+    # Se ALTERNAN los roles en vez de vaciar uno y después el otro. Si se
+    # colocan primero todos los comerciales, al equipo que ya venía lleno (por
+    # ejemplo el de un grupo «juntos» de cinco) le llegan solo técnicos al
+    # final, y el reparto acaba en 5-1. Alternando, cuando le toca su último
+    # hueco todavía quedan los dos roles y se le da el que le falta.
+    colas = [(rol, list(grupos_rol[rol])) for rol in orden]
+    turnos: list[tuple[int, str]] = []
+    while any(cola for _r, cola in colas):
+        for rol, cola in colas:
+            if cola:
+                turnos.append((cola.pop(0), rol))
+    for pid, rol in turnos:
+        def clave(eid: int, rol: str = rol) -> tuple[int, int]:
+            return (tam_total[eid], tam_rol.get((eid, rol), 0))
+        mejor = min(clave(eid) for eid in ids_equipos)
+        eid = random.choice([i for i in ids_equipos if clave(i) == mejor])
+        asignar(pid, eid, rol)
     con.commit()
     con.close()
     return n_repartidos
