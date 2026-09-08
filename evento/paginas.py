@@ -1560,7 +1560,8 @@ def render_participante(cfg: dict, p: dict, equipo: dict | None,
             f'{enlace_sitio}<div class="silencio">Hay que estar allí a las '
             f'{e(cfg.get("escape_hora"))}'
             f'{" — " + e(cfg.get("escape_nota")) if (cfg.get("escape_nota") or "").strip() else ""}'
-            f'.</div>{recuerdo_capitan}')
+            f'.</div>{recuerdo_capitan}'
+)
 
     # Su tanda de karts, si está sorteada
     aviso_tanda = ""
@@ -1588,7 +1589,8 @@ def render_participante(cfg: dict, p: dict, equipo: dict | None,
             cfg.get(f"karts_hora{tanda}") or "",
             f'<strong>Te toca en la {ORDINAL_TANDA[tanda]} tanda</strong>'
             f'{extra}{sitio_karts}<div class="silencio">Al bajarte del kart, apunta '
-            f'tu vuelta en la pestaña 🏆 Puntos.</div>')
+            f'tu vuelta en la pestaña 🏆 Puntos.</div>'
+)
 
     # Olimpiada cerrada: felicitación a quien tiene premio y resultado para el resto
     banda_final, confeti_color = "", ""
@@ -2510,12 +2512,6 @@ def _tarjeta_salas(cfg: dict, equipos: list[dict], lugares: list[dict],
       <div><label>Lugar</label>
         <select name="escape_lugar_id">{opciones_lugar}</select></div>
     </div>
-    <label>Los compañeros de equipo no se ven hasta…</label>
-    <input name="equipos_desde" type="datetime-local"
-           value="{e(cfg.get('equipos_desde'))}">
-    <div class="silencio" style="margin-top:4px">Cada uno ve SU equipo desde el
-    primer momento, pero con quién va no se destapa hasta esa hora, y entonces
-    se destapa para todos a la vez. Déjalo vacío para que se vean desde ya.</div>
     <label>Aviso de llegada (sale junto a la hora, en la tarjeta y en el programa)</label>
     <input name="escape_nota" value="{e(cfg.get('escape_nota'))}" style="width:100%"
            placeholder="mejor ya aparcados, para empezar sin prisas">
@@ -2854,6 +2850,12 @@ def render_evento(cfg: dict, avisos=None, sin_password=False) -> str:
     <label>Contacto de la organización (nombre y teléfono; sale al pie de la página)</label>
     <input name="contacto" value="{e(cfg.get('contacto'))}" style="width:100%"
            placeholder="Borja (600 111 222)">
+    <label>Los compañeros de equipo no se ven hasta…</label>
+    <input name="equipos_desde" type="datetime-local"
+           value="{e(cfg.get('equipos_desde'))}">
+    <div class="silencio" style="margin-top:4px">Cada uno ve SU equipo desde el
+    primer momento, pero con quién va no se destapa hasta esa hora, y entonces
+    se destapa para todos a la vez. Déjalo vacío para que se vean desde ya.</div>
     <label>URL pública de la app (para generar los enlaces personales)</label>
     <input name="url_base" value="{e(cfg.get('url_base'))}" style="width:100%"
            placeholder="https://evento.neamaster.com o http://IP:8502">

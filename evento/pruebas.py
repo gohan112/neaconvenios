@@ -530,6 +530,45 @@ ok(paginas.nombre_corto(companero) in tarjeta_equipo(c.get(f"/p/{alguien['token'
    "y una fecha mal escrita no deja a nadie a oscuras")
 db.guardar_config({"equipos_desde": ""})
 
+# --------------------------- 8d. Cada casilla del panel, guardada por su ruta
+titulo("Cada casilla del panel la guarda quien debe")
+# Se descubrió a las malas: tres campos (uno de ellos el del secreto de los
+# equipos) tenían su casilla en un formulario pero los leía OTRA ruta. No se
+# guardaban nunca y, peor, al guardar la otra pantalla se ponían en blanco.
+import ast as _ast, re as _re  # noqa: E402
+
+_carpeta = os.path.dirname(os.path.abspath(__file__))
+_html = io.open(os.path.join(_carpeta, "paginas.py"), encoding="utf-8").read()
+_formularios: dict = {}
+for _m in _re.finditer(r'<form[^>]*action="(/admin/[^"{]+)"(.*?)</form>', _html, _re.S):
+    _formularios.setdefault(_m.group(1), set()).update(
+        _re.findall(r'<(?:input|textarea|select)[^>]*\bname="([a-z_0-9]+)"', _m.group(2)))
+
+_arbol = _ast.parse(io.open(os.path.join(_carpeta, "app.py"), encoding="utf-8").read())
+_rutas: dict = {}
+for _nodo in _arbol.body:
+    if not isinstance(_nodo, _ast.FunctionDef):
+        continue
+    for _deco in _nodo.decorator_list:
+        if (isinstance(_deco, _ast.Call) and getattr(_deco.func, "attr", "") == "post"
+                and _deco.args and isinstance(_deco.args[0], _ast.Constant)):
+            _leidos = set()
+            for _x in _ast.walk(_nodo):
+                if (isinstance(_x, _ast.Call) and getattr(_x.func, "attr", "") == "get"
+                        and getattr(_x.func.value, "attr", "") == "form"
+                        and _x.args and isinstance(_x.args[0], _ast.Constant)):
+                    _leidos.add(_x.args[0].value)
+            _rutas[_deco.args[0].value] = _leidos
+
+_SUELTOS = {"password", "fichero", "valor", "modo", "codigo", "tiempo", "ids", "nombres"}
+for _accion in sorted(set(_formularios) & set(_rutas)):
+    _campos = {x for x in _formularios[_accion] if x not in _SUELTOS}
+    _guardados = {x for x in _rutas[_accion] if x not in _SUELTOS}
+    ok(_campos == _guardados,
+       f'{_accion}: se escriben {sorted(_campos - _guardados) or "todos"} y se '
+       f'guardan {sorted(_guardados - _campos) or "todos"}'
+       if _campos != _guardados else f'{_accion} ({len(_campos)} campos)')
+
 # ------------------------------------------- 9a. El programa lleva TODO el día
 titulo("El programa del día lo lleva todo")
 db.guardar_config({"escape_hora": "08:40", "escape_titulo": "Escape room",

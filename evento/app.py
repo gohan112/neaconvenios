@@ -702,6 +702,7 @@ def admin_salas_config():
         "escape_hora": db.normalizar_hora(request.form.get("escape_hora", "")),
         "escape_salas": request.form.get("escape_salas", ""),
         "escape_lugar_id": request.form.get("escape_lugar_id", ""),
+        "escape_nota": request.form.get("escape_nota", ""),
     })
     flash("Datos de la escape room guardados.", "ok")
     return redirect("/admin/agenda")
@@ -1022,7 +1023,6 @@ def admin_evento_guardar():
         "url_base": (request.form.get("url_base", "") or "").rstrip("/"),
         "msg_whatsapp": request.form.get("msg_whatsapp", ""),
         "msg_asunto": request.form.get("msg_asunto", ""),
-        "escape_nota": request.form.get("escape_nota", ""),
         "equipos_desde": request.form.get("equipos_desde", ""),
     })
     flash("Datos del evento guardados.", "ok")
