@@ -268,9 +268,13 @@ pilotos = [p for p in db.listar_participantes()
 # Tiempos a mano: los dos primeros vuelan, el resto van más lentos
 for i, x in enumerate(pilotos):
     db.poner_tiempo_karts(x["id"], f"0:4{i}.100" if i < 2 else f"1:0{i}.500")
-rapidos, piloto = pilotos[:2], pilotos[2]
 for x in pilotos:
     db.marcar_revelado(x["id"])
+# Con 2 por equipo entra más gente, así que «el que no pasa» hay que buscarlo:
+# se pregunta a la app en vez de suponer que es el tercero más rápido.
+clasificados = {x["id"] for x in db.estado_final()["por_tiempo"]}
+rapidos = pilotos[:2]
+piloto = next(x for x in pilotos if x["id"] not in clasificados)
 
 r = c.get(f"/p/{piloto['token']}")
 ok("Tu vuelta en la" in r.text, "cada uno ve el hueco de su tanda")
@@ -278,8 +282,23 @@ ok("Tu vuelta en la final" not in r.text, "quien no pasa no tiene hueco extra")
 ok("Pasas a la final" not in r.text, "ni enhorabuena")
 
 estado = db.estado_final()
-ok(estado["cerrado"] and [x["id"] for x in estado["por_tiempo"]]
-   == [x["id"] for x in rapidos], "con todos los tiempos, pasan los 2 mejores")
+# Pasan los DOS MEJORES DE CADA EQUIPO, no los dos mejores del día: así la
+# segunda vuelta se reparte y no se la llevan dos del mismo equipo.
+equipos_pilotos = {x["equipo_id"] for x in pilotos}
+ok(estado["cerrado"], "con todos los tiempos, la final está decidida")
+ok(len(estado["por_tiempo"]) == 2 * len(equipos_pilotos),
+   f'pasan 2 por equipo: {len(estado["por_tiempo"])} de '
+   f'{len(equipos_pilotos)} equipos')
+for eid in equipos_pilotos:
+    suyos = {x["id"] for x in estado["por_tiempo"] if x["equipo_id"] == eid}
+    # Releídos: los de «pilotos» se cargaron antes de apuntar los tiempos
+    frescos = [db.participante(x["id"]) for x in pilotos if x["equipo_id"] == eid]
+    delequipo = sorted(frescos, key=lambda x: db.mejor_vuelta(x))
+    ok(suyos == {x["id"] for x in delequipo[:2]},
+       f'del equipo {eid} pasan sus dos más rápidos: '
+       f'{", ".join(x["apodo"] for x in delequipo[:2])}')
+rapidos = [x for x in estado["por_tiempo"] if x["id"] in {y["id"] for y in pilotos[:2]}]
+ok(len(rapidos) == 2, "los dos más rápidos del día siguen pasando, claro")
 r = c.get(f"/p/{rapidos[0]['token']}")
 ok("Pasas a la final" in r.text, "y a ellos se lo dice la app, sin que nadie los marque")
 ok("Tu vuelta en la final" in r.text, "con su hueco para la vuelta de la 3ª tanda")
@@ -288,12 +307,16 @@ ok(c.get(f"/p/{rapidos[0]['token']}/equipo.json").json["final"] is True,
    "el sondeo del móvil lleva la bandera (para enterarse sin recargar)")
 
 # Mientras falte una vuelta por apuntar no se canta nada: sería una alegría en falso
+piloto = next(x for x in pilotos
+              if x["equipo_id"] == rapidos[0]["equipo_id"] and x["id"] != rapidos[0]["id"]
+              and x["id"] not in {y["id"] for y in estado["por_tiempo"]})
 db.poner_tiempo_karts(piloto["id"], "")
 ok(not db.estado_final()["cerrado"], "sin todos los tiempos, la final no está decidida")
 r = c.get(f"/p/{rapidos[0]['token']}")
 ok("Pasas a la final" not in r.text and "Tu vuelta en la final" not in r.text,
    "y nadie recibe la enhorabuena todavía")
-ok("falta 1 tiempo por apuntar" in r.text, "se dice cuántos tiempos faltan")
+ok("falta 1 compañero por apuntar" in r.text,
+   "se dice cuántos faltan, contando solo su equipo")
 ok(c.post(f"/p/{rapidos[0]['token']}/tiempo_karts",
           data={"tiempo_final": "40.0"}).status_code == 403,
    "y tampoco se puede colar un tiempo de la final")

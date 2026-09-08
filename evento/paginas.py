@@ -1456,12 +1456,13 @@ def render_participante(cfg: dict, p: dict, equipo: dict | None,
                           'veces: para los puntos cuenta tu <strong>mejor</strong> '
                           'vuelta de las dos.</p>')
         elif tanda_p in ("1", "2") and faltan_tiempos:
-            falta = ("falta 1 tiempo por apuntar"
-                     if faltan_tiempos == 1 else f"faltan {faltan_tiempos} tiempos")
+            falta = ("falta 1 compañero por apuntar el suyo"
+                     if faltan_tiempos == 1
+                     else f"faltan {faltan_tiempos} compañeros por apuntar el suyo")
             nota_final = (f'<p class="silencio" style="margin-bottom:0">Los <strong>2 '
-                          f'mejores</strong> de las dos primeras tandas pasan a la '
-                          f'final. Todavía {falta}: en cuanto estén todos, la app '
-                          f'avisa a quien pasa.</p>')
+                          f'mejores de tu equipo</strong> pasan a la final. En el tuyo '
+                          f'todavía {falta}: en cuanto estén todos, la app avisa a '
+                          f'quien pasa.</p>')
         else:
             nota_final = ""
         tarjeta_vuelta = f"""
@@ -1493,17 +1494,17 @@ def render_participante(cfg: dict, p: dict, equipo: dict | None,
         if tanda_p == "3":
             deberes = ('<div>🏎️ <strong>Apunta tu vuelta de la final</strong> aquí '
                        'abajo en cuanto te bajes del kart.</div>')
-            deberes += ('<div>🏁 Contigo corren los <strong>2 mejores tiempos</strong> '
-                        'de las dos primeras tandas.</div>')
+            deberes += ('<div>🏁 Contigo corren los <strong>2 mejores de cada '
+                        'equipo</strong>: sois 8 en pista, parrilla completa.</div>')
         elif corre_final:
             deberes = ('<div>🏎️ <strong>Apunta tus dos vueltas</strong> aquí abajo: '
                        'la de tu tanda y la de la final. Cuenta la mejor.</div>')
         else:
             deberes = ('<div>🏎️ <strong>Apunta tu vuelta</strong> aquí abajo en '
                        'cuanto te bajes del kart.</div>')
-            deberes += ('<div>🏁 Los <strong>2 mejores tiempos</strong> de las dos '
-                        'primeras tandas se van a la final: cuando estén todos los '
-                        'tiempos, la app avisa a quien pasa.</div>')
+            deberes += ('<div>🏁 Los <strong>2 mejores de tu equipo</strong> se van '
+                        'a la final y corren otra vez: en cuanto tu equipo tenga '
+                        'todos los tiempos, la app avisa a quien pasa.</div>')
         if es_capitan:
             deberes += ('<div>👑 <strong>Eres el capitán:</strong> velar por que se '
                         'cumplan los horarios, que los tuyos estén en cada sitio a '
@@ -1568,7 +1569,7 @@ def render_participante(cfg: dict, p: dict, equipo: dict | None,
         extra = ""
         if tanda == "3":
             extra = ('<div class="silencio">A la 3ª tanda, la final, también irán los '
-                     '2 mejores tiempos de las tandas anteriores.</div>')
+                     '2 mejores de cada equipo.</div>')
         elif corre_final:
             hora_final = (cfg.get("karts_hora3") or "").strip()
             extra = ('<div class="silencio">🎉 <strong>¡Has pasado a la final!</strong> '
@@ -1650,7 +1651,7 @@ def render_participante(cfg: dict, p: dict, equipo: dict | None,
 <div class="tarjeta destacada celebracion">
   <div class="medallon" aria-hidden="true">🏎️</div>
   <h2>¡Pasas a la final!</h2>
-  <p>Has hecho uno de los <strong>2 mejores tiempos</strong> de las dos primeras
+  <p>Has hecho uno de los <strong>2 mejores tiempos de tu equipo</strong> en las
   tandas, así que vuelves a pista en la <strong>3ª tanda</strong>.{cuando}
   Prepárate. 🔥</p>
   <p class="silencio" style="margin-bottom:0">Cuando la corras, apunta esa vuelta
@@ -1929,7 +1930,7 @@ def render_puntos(cfg: dict, clasif: dict, equipos: list[dict],
         cuantos = ("Falta 1 vuelta por apuntar" if len(final["pendientes"]) == 1
                    else f'Faltan {len(final["pendientes"])} vueltas por apuntar')
         aviso_final = (f'<div class="aviso">⏳ {cuantos}: {quienes}. Cuando estén '
-                       f'todas, la app avisa sola a los 2 mejores.</div>')
+                       f'todas, la app avisa sola a los 2 mejores de cada equipo.</div>')
     else:
         aviso_final = ""
 
@@ -1960,7 +1961,7 @@ def render_puntos(cfg: dict, clasif: dict, equipos: list[dict],
   enlace (pestaña 🏆 Puntos); aquí puedes corregirla o meterla tú. Formatos válidos:
   <code>48.123</code>, <code>48,3</code> o <code>1:02.451</code> — hasta
   milésimas, tal y como salga en la pantalla del circuito.</p>
-  <p class="silencio">A la 3ª tanda pasan solos los <strong>2 mejores tiempos</strong>
+  <p class="silencio">A la 3ª tanda pasan solos los <strong>2 mejores de cada equipo</strong>
   de las dos primeras: en cuanto estén todos apuntados, la app se lo dice a ellos en
   su móvil. La casilla <strong>«pasa a la final»</strong> es para forzarlo a mano (si
   alguien no puede apuntar su vuelta, por ejemplo). El más rápido se lleva tantos
@@ -2559,7 +2560,7 @@ def _tarjeta_tandas(cfg: dict, participantes: list[dict],
                 chips += (f'<span class="chip">'
                           f'{_simbolo_equipo(p.get("equipo_color"), p.get("equipo_emoji")) if p.get("equipo_nombre") else ""}'
                           f'{e(nombre_corto(p))}</span>')
-        extra = (' <span class="silencio">+ los 2 mejores tiempos de las tandas '
+        extra = (' <span class="silencio">+ los 2 mejores de cada equipo de las tandas '
                  'anteriores</span>' if t == "3" else "")
         if hay_tandas:
             listas += (f'<div style="margin:6px 0"><strong>{ORDINAL_TANDA[t]} tanda '
@@ -2590,7 +2591,7 @@ def _tarjeta_tandas(cfg: dict, participantes: list[dict],
     </form>
   </div>
   <p class="silencio">8 y 8 al azar en las dos primeras (repartiendo cada equipo
-  entre ambas); los que quedan fuera van a la 3ª, la final, junto a los 2 mejores
+  entre ambas); los que quedan fuera van a la 3ª, la final, junto a los 2 mejores de cada equipo
   tiempos (eso se decide en la pista — puedes cambiar la tanda de cualquiera en
   su ficha). Cada participante ve su tanda y su hora en su Programa.</p>
   {listas}

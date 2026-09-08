@@ -176,7 +176,8 @@ def ver_participante(token: str):
         lugar_karts=lugar_karts, clasif=clasif,
         hora_actual=_hora_si_es_hoy(cfg), corre_final=p["id"] in final["ids"],
         pasa_por_tiempo=any(x["id"] == p["id"] for x in final["por_tiempo"]),
-        faltan_tiempos=len(final["pendientes"]),
+        # Solo los de SU equipo: es de su equipo de quien depende que pase o no
+        faltan_tiempos=len(final["faltan_de"].get(p["equipo_id"], [])),
         ganadores=premios, compis_visibles=db.companeros_a_la_vista(),
         avisos=_avisos(),
     )

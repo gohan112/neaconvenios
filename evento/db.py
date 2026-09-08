@@ -667,29 +667,49 @@ def mejor_vuelta(p: dict) -> int | None:
     return min(tiempos) if tiempos else None
 
 
+# Dos por equipo. Con los dos que se quedaron fuera de las primeras tandas
+# salen 2 + 3×2 = 8: una parrilla completa, igual que las otras dos.
+FINALISTAS_POR_EQUIPO = 2
+
+
 def estado_final() -> dict:
     """Quién corre la 3ª tanda (la final) y si eso ya es definitivo.
 
-    Van los que se quedaron fuera de las dos primeras tandas y, por tiempo, los
-    2 mejores. Para no dar una alegría en falso, los 2 mejores no se anuncian
-    hasta que TODOS los de las tandas 1 y 2 tengan su vuelta apuntada; mientras
-    tanto se dice cuántos faltan. Marcar a alguien a mano en el panel manda
-    siempre (por si a alguien se le queda el móvil sin batería).
+    Van los que se quedaron fuera de las dos primeras tandas y, por tiempo,
+    los DOS MEJORES DE CADA EQUIPO: así la segunda vuelta se reparte por igual
+    entre los tres y no se la llevan dos del mismo.
+
+    Para no dar una alegría en falso, los de un equipo no se anuncian hasta
+    que TODOS los de ESE equipo tengan su vuelta apuntada; mientras tanto se
+    dice cuántos faltan. Marcar a alguien a mano en el panel manda siempre
+    (por si a alguien se le queda el móvil sin batería).
     """
     gente = listar_participantes()
     pilotos = [p for p in gente if (p.get("tanda") or "").strip() in ("1", "2")]
+
+    por_equipo: dict = {}
+    for p in pilotos:
+        por_equipo.setdefault(p.get("equipo_id"), []).append(p)
+
     pendientes = [p for p in pilotos if mejor_vuelta(p) is None]
-    cerrado = bool(pilotos) and not pendientes
+    faltan_de = {eid: [p for p in v if mejor_vuelta(p) is None]
+                 for eid, v in por_equipo.items()}
+
     por_tiempo = []
-    if cerrado:
-        ordenados = sorted(pilotos, key=lambda p: mejor_vuelta(p))
-        corte = mejor_vuelta(ordenados[min(1, len(ordenados) - 1)])
-        por_tiempo = [p for p in ordenados if mejor_vuelta(p) <= corte]  # empates dentro
+    for eid, miembros in por_equipo.items():
+        if faltan_de[eid]:
+            continue                       # ese equipo todavía no está entero
+        ordenados = sorted(miembros, key=lambda p: mejor_vuelta(p))
+        corte = mejor_vuelta(ordenados[min(FINALISTAS_POR_EQUIPO - 1,
+                                           len(ordenados) - 1)])
+        por_tiempo += [p for p in ordenados if mejor_vuelta(p) <= corte]  # empates dentro
+
+    cerrado = bool(pilotos) and not pendientes
     ids = {p["id"] for p in gente
            if (p.get("tanda") or "").strip() == "3" or p.get("finalista")}
     ids |= {p["id"] for p in por_tiempo}
     return {"ids": ids, "por_tiempo": por_tiempo, "pendientes": pendientes,
-            "cerrado": cerrado}
+            "faltan_de": faltan_de, "cerrado": cerrado}
 
 
 def corre_la_final(p: dict) -> bool:
