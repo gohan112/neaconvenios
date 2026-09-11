@@ -308,3 +308,51 @@ Por si hay que tocar el aspecto más adelante, el criterio que sigue la app:
 - **Accesible por defecto.** Foco visible en todo lo pulsable, `aria-selected`
   en las pestañas (y flechas del teclado), avisos con `role="status"` y
   respeto por «reducir movimiento» del sistema.
+
+## Para el próximo evento: que esto no cueste dinero
+
+Esta app costó unos **1,5 € al día** estando parada. No por el tráfico (18
+personas no gastan nada) sino por una decisión de montaje que conviene no
+repetir.
+
+**Qué pasó.** La base de datos es un fichero SQLite dentro del contenedor, y
+en Cloud Run el contenedor es desechable: si se duerme, el fichero desaparece.
+Para que eso fuera seguro se metió **Litestream**, que va copiando la base a un
+bucket. Pero Litestream es un proceso de fondo, y un proceso de fondo solo
+corre si la máquina está despierta. De ahí salen estas dos banderas del
+despliegue:
+
+    --min-instances 1 --no-cpu-throttling
+
+Que significan «ten un ordenador encendido siempre», y eso se paga las 24 h,
+se use o no. Las demás apps de Firebase cuestan 0 € porque **se duermen**: se
+paga por visita, y con 18 personas no se llega ni al mínimo gratuito.
+
+**Cómo se arregla (cambio pequeño, quita el problema de raíz).** La base de
+este evento ocupa ~100 KB y se escribe unas 50 veces en todo el día. No hace
+falta replicación continua: basta con **subir el fichero entero al bucket en
+cada escritura**, dentro de la propia petición, y bajárselo al arrancar. Sin
+proceso de fondo no hacen falta las dos banderas, el contenedor puede dormirse
+y la factura se va a 0 €. Se conserva todo lo demás: Flask, SQLite, `db.py`.
+
+Tres reglas que hay que respetar, porque son justo las que nos mordieron:
+
+1. **Si al arrancar hay copia en el bucket y no se puede bajar, no arrancar.**
+   Nunca empezar con una base vacía encima de la buena. (Es lo que ya hace
+   `deploy/arranque_nube.sh`; ese criterio se mantiene igual.)
+2. **`--max-instances 1`.** SQLite lo escribe uno. Al subir, usar la
+   precondición de generación de GCS para detectar si otro ha escrito antes.
+3. **Si la subida falla, no decirle al usuario «guardado».** Que el error se
+   vea, en vez de perderse en un log.
+
+**La alternativa «como tus otras apps»** es guardar en Firestore en vez de
+SQLite: es lo que hace que las demás salgan gratis, y ya no hay fichero que
+perder. Pero eso es reescribir `db.py` entero, no un ajuste.
+
+**La regla general:** en Cloud Run, cualquier cosa que obligue a `min-instances
+1` convierte un «pago por uso» en un alquiler mensual. Antes de añadir un
+proceso de fondo, mirar si el problema se puede resolver dentro de la
+petición.
+
+Mientras tanto, `deploy/apagar.sh` duerme la máquina cuando el evento ha
+pasado (comprueba la copia antes de tocar nada).
