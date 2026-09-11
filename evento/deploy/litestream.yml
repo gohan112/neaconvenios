@@ -4,8 +4,11 @@ dbs:
   - path: /data/evento.db
     replicas:
       - url: ${REPLICA_URL}
-        # Con 18 personas apuntando tiempos, cada segundo va sobrado
-        sync-interval: 1s
-        # Una instantánea cada hora y se guardan 3 días: sobra para un evento
-        snapshot-interval: 1h
+        # Cada 10 s. Antes estaba en 1 s, que era precisión de más para 18
+        # personas apuntando tiempos: en el peor caso (que se caiga la máquina
+        # justo entonces) se pierden los últimos 10 segundos de escritura.
+        # A cambio, subimos al bucket 10 veces menos.
+        sync-interval: 10s
+        # Una instantánea cada 6 h y se guardan 3 días: de sobra para un evento
+        snapshot-interval: 6h
         retention: 72h
