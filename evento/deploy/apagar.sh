@@ -1,7 +1,15 @@
 #!/usr/bin/env bash
-# Deja de pagar la máquina encendida cuando el evento ya ha pasado.
+# Cierra el evento: nadie puede entrar y deja de correr la factura.
 #
 #     bash deploy/apagar.sh
+#
+# Hace dos cosas, en este orden:
+#   1. Le quita el acceso público al servicio. A partir de ahí, quien abra el
+#      enlace ve un 403 y no entra nadie. Se deshace con un comando.
+#   2. Deja que la máquina se duerma, que es lo que cuesta dinero.
+#
+# IMPORTANTE: bájate la copia ANTES. Una vez cerrado no puedes entrar en
+# /admin ni tú, así que el botón de «Descargar copia» deja de estar a mano.
 #
 # Lo caro de esta app NO es la copia de seguridad: es que hay un ordenador
 # despierto 24 h al día (--min-instances 1). Eso se paga esté usándose o no,
@@ -52,18 +60,26 @@ case "${HECHO:-n}" in
 esac
 
 echo ""
-echo ">> 3/3 Dejando que la máquina se duerma…"
+echo ">> 3/4 Cerrando la puerta: que no entre nadie…"
+gcloud run services remove-iam-policy-binding "$SERVICIO" \
+  --project "$PROYECTO" --region "$REGION" \
+  --member allUsers --role roles/run.invoker
+
+echo ""
+echo ">> 4/4 Dejando que la máquina se duerma…"
 gcloud run services update "$SERVICIO" --project "$PROYECTO" --region "$REGION" \
   --min-instances 0
 
 echo ""
 echo "============================================================"
-echo "  Listo. A partir de ahora solo se enciende cuando alguien entra."
+echo "  Listo. Cerrado y sin gastar."
 echo ""
-echo "  · La app sigue funcionando y los enlaces siguen valiendo."
-echo "  · La primera visita tras un rato parado tarda unos segundos."
-echo "  · Si algún día quieres volver a dejarla despierta:"
-echo "       gcloud run services update $SERVICIO --region $REGION --min-instances 1"
+echo "  · Los enlaces ya no abren: quien entre ve un 403."
+echo "  · Los datos siguen en gs://$BUCKET (y en la copia que te bajaste)."
+echo ""
+echo "  Si algún día quieres volver a abrirlo:"
+echo "     gcloud run services add-iam-policy-binding $SERVICIO \\"
+echo "       --region $REGION --member allUsers --role roles/run.invoker"
 echo ""
 echo "  Y si ya no la quieres para nada, esto la borra del todo:"
 echo "       gcloud run services delete $SERVICIO --region $REGION"
